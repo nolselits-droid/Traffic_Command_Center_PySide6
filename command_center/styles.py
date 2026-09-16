@@ -216,6 +216,32 @@ QPushButton#dangerButton {
     border-color: #8e3f48;
 }
 
+QPushButton#alarmButton {
+    min-height: 28px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+}
+
+QPushButton#alarmButton[severity="normal"] {
+    color: #8de0b1;
+    background-color: #123726;
+    border-color: #24593d;
+}
+
+QPushButton#alarmButton[severity="warning"] {
+    color: #ffd77b;
+    background-color: #46330f;
+    border-color: #745719;
+}
+
+QPushButton#alarmButton[severity="critical"] {
+    color: #ffd7da;
+    background-color: #5a252b;
+    border-color: #a34b55;
+}
+
 QPushButton#navButton {
     min-height: 40px;
     text-align: left;
@@ -258,6 +284,32 @@ QComboBox QAbstractItemView {
     background-color: #101e2e;
     border: 1px solid #385069;
     selection-background-color: #174c79;
+}
+
+QTableWidget#eventTable {
+    color: #dce8f5;
+    background-color: #0b1724;
+    alternate-background-color: #101e2e;
+    border: 1px solid #2a3d52;
+    border-radius: 8px;
+    gridline-color: #26374a;
+    selection-background-color: #174c79;
+    selection-color: #ffffff;
+}
+
+QTableWidget#eventTable::item {
+    padding: 5px;
+}
+
+QHeaderView::section {
+    color: #b8c9da;
+    background-color: #132234;
+    border: none;
+    border-right: 1px solid #2a3d52;
+    border-bottom: 1px solid #2a3d52;
+    padding: 7px;
+    font-size: 11px;
+    font-weight: 600;
 }
 
 QScrollBar:vertical {

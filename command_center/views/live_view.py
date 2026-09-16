@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..controller_service import ControllerService
+from ..event_service import EventService
 from ..models import CameraConfiguration, CameraRole, ControllerMode, ControllerSnapshot
 from ..vlc_player import (
     FullscreenCameraDialog,
@@ -130,6 +131,7 @@ class CameraTile(QFrame):
 
     def start(self) -> None:
         self._active = True
+        self._last_online = None
         self.retry_timer.stop()
         if not self.camera.enabled:
             self.placeholder.setText("CAMERA DISABLED")
@@ -232,9 +234,15 @@ class CameraTile(QFrame):
 
 
 class LiveView(QWidget):
-    def __init__(self, service: ControllerService, parent=None) -> None:
+    def __init__(
+        self,
+        service: ControllerService,
+        event_service: EventService | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self.service = service
+        self.event_service = event_service
         self.current_controller_id = (
             service.controllers[0].controller_id if service.controllers else ""
         )
@@ -434,7 +442,7 @@ class LiveView(QWidget):
             for tile in self.camera_tiles:
                 tile.start()
         else:
-            self._stop_all_cameras()
+            self._stop_all_cameras(emit_status=False)
 
     def _selector_changed(self) -> None:
         controller_id = self.controller_selector.currentData()
@@ -502,7 +510,19 @@ class LiveView(QWidget):
         for tile in self.camera_tiles:
             tile.stop(emit_status=emit_status)
 
-    def _camera_status_changed(self, _camera_id: str, _online: bool) -> None:
+    def _camera_status_changed(self, camera_id: str, online: bool) -> None:
+        snapshot = self.service.get_controller(self.current_controller_id)
+        if snapshot and self.event_service:
+            camera = next(
+                (item for item in snapshot.cameras if item.camera_id == camera_id),
+                None,
+            )
+            self.event_service.handle_camera_status(
+                snapshot.controller_id,
+                camera_id,
+                camera.name if camera else camera_id,
+                online,
+            )
         if self.current_controller_id:
             self.service.snapshot_updated.emit(self.current_controller_id)
 
@@ -511,7 +531,7 @@ class LiveView(QWidget):
         camera: CameraConfiguration,
         tile: CameraTile,
     ) -> None:
-        tile.stop()
+        tile.stop(emit_status=False)
         dialog = FullscreenCameraDialog(camera, self)
         dialog.open_fullscreen()
         if self.streaming_active and self.service.is_live:

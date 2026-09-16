@@ -80,6 +80,7 @@ def build_mock_controllers() -> list[ControllerSnapshot]:
             current_stage=stage,
             total_stages=total,
             remaining_seconds=remaining,
+            last_update_at="MOCK",
             active_signal_groups=sg_count,
         )
         snapshot.signal_groups = make_signal_groups(sg_count, stage)

@@ -1,0 +1,67 @@
+TRAFFIC COMMAND CENTER V0.5.01 - EVENT & ALARM TEST
+=================================================
+
+A. CHECKPOINT
+1. V0.4 FIX2 sudah diuji dengan tampilan kamera stabil.
+2. Commit dasar: 3f29ffb.
+3. Tag dasar: v0.4.2.
+
+B. STARTUP
+1. Aktifkan virtual environment.
+2. Install dependency: python -m pip install -r requirements.txt
+3. Jalankan: python main.py
+4. Top bar harus menampilkan tombol ALARM.
+5. Menu ALARMS & EVENTS tidak boleh lagi berupa placeholder.
+
+C. DATABASE DAN AUDIT
+1. Pastikan command_center_data/events.db dibuat otomatis.
+2. Buka ALARMS & EVENTS.
+3. Harus ada audit Command Center V0.5.01 started.
+4. Ubah MOCK/LIVE pada CONTROLLERS dan tekan SAVE & CONNECT.
+5. Harus muncul audit Controller connection settings updated.
+
+D. COMMUNICATION ALARM
+1. Gunakan LIVE API ke satu controller yang aktif.
+2. Putus koneksi jaringan controller.
+3. Setelah dua polling gagal, alarm CRITICAL harus muncul.
+4. Top bar harus menampilkan jumlah alarm aktif dan NEW.
+5. Sambungkan controller kembali.
+6. Alarm lama berubah menjadi RESOLVED dan event INFO pemulihan muncul.
+
+E. MODE DAN SAFETY
+1. Uji controller pada mode HOLD, FLASHING, dan SAFETY jika aman dilakukan.
+2. HOLD dan FLASHING harus tercatat WARNING.
+3. SAFETY/green conflict/fault harus tercatat CRITICAL.
+4. Ketika kembali NORMAL/OK, alarm aktif harus ditutup otomatis.
+5. Command Center tidak boleh mengirim perintah kontrol traffic.
+
+F. CAMERA ALARM
+1. Buka LIVE VIEW hingga camera berstatus LIVE.
+2. Putus jaringan salah satu camera.
+3. Setelah stream gagal, camera offline harus tercatat WARNING.
+4. Sambungkan camera kembali; event camera kembali online harus muncul.
+5. Pindah halaman atau membuka fullscreen tidak boleh membuat alarm palsu.
+
+G. ACKNOWLEDGE
+1. Pilih satu alarm CRITICAL/WARNING dan tekan ACKNOWLEDGE SELECTED.
+2. Kolom ACK berubah menjadi YES.
+3. Alarm tetap ACTIVE selama penyebabnya belum pulih.
+4. Tombol ACKNOWLEDGE ALL ACTIVE harus meminta konfirmasi.
+
+H. FILTER DAN EXPORT
+1. Uji filter Controller, Severity, State, dan Search.
+2. Tekan EXPORT CSV.
+3. File CSV harus dapat dibuka dan hanya berisi event sesuai filter.
+
+I. CONNECTION HEALTH
+1. Pada OVERVIEW periksa API response time dan errors.
+2. Saat koneksi normal, response time harus tampil dalam ms.
+3. Saat request gagal, jumlah errors harus meningkat.
+4. Tooltip health menampilkan waktu last successful update.
+5. Saat controller tetap offline, retry melambat bertahap hingga maksimum 15 detik.
+
+J. REGRESSION
+1. Kamera tetap tampil dan ukuran panel tidak berubah sendiri.
+2. Overview, Live View, Controllers, dan Camera Configuration tetap berfungsi.
+3. Tombol SKIP, HOLD, FLASHING tetap disabled pada LIVE API.
+4. Menutup Command Center tidak memengaruhi controller.

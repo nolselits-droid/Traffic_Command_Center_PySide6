@@ -1,8 +1,8 @@
-# Traffic Command Center — PySide6 V0.4 FIX2
+# Traffic Command Center — PySide6 V0.5.01
 
 Command Center read-only untuk Traffic Light Controller ESP32-S3 V1.23.1 dengan monitoring RTSP camera.
 
-FIX2 mempertahankan perbaikan RTSP pada FIX1 dan menstabilkan layout Live View. Perubahan teks status kamera tidak lagi dapat mengubah lebar panel kamera maupun Live Intersection Diagram.
+V0.5.01 memulai tahap Command Center Management dengan Event & Alarm yang tersimpan permanen di SQLite. Perbaikan RTSP dan layout kamera dari V0.4 FIX2 tetap dipertahankan. Traffic Control dan perubahan konfigurasi traffic masih dinonaktifkan.
 
 ## Fitur utama
 
@@ -19,6 +19,15 @@ FIX2 mempertahankan perbaikan RTSP pada FIX1 dan menstabilkan layout Live View. 
 - Password kamera disimpan melalui Windows Credential Manager menggunakan `keyring`.
 - Traffic Control tetap dinonaktifkan dalam LIVE API.
 - Rasio panel Live Camera dan Live Intersection Diagram tetap 7:4 ketika status stream berubah.
+- Alarm komunikasi controller, mode HOLD/FLASHING/SAFETY, status safety, dan camera offline.
+- Alarm aktif ditutup otomatis saat kondisi pulih dan pemulihan dicatat sebagai event baru.
+- Acknowledge satu/beberapa alarm atau seluruh alarm aktif.
+- Filter event berdasarkan controller, severity, status, dan kata pencarian.
+- Export event yang sedang difilter ke file CSV.
+- Indikator jumlah alarm aktif dan alarm baru pada top bar.
+- Response time API, jumlah kegagalan berurutan, dan last successful update.
+- Auto-reconnect bertahap 1, 2, 5, 10, lalu maksimum 15 detik ketika controller offline.
+- Audit perubahan Controller Connection serta waktu aplikasi start/close.
 
 ## Persyaratan Windows
 
@@ -51,6 +60,25 @@ RETRY · TIMEOUT 12s
 ```
 
 Jika `LIVE` tampil tetapi gambar tetap hitam, periksa codec kamera dan samakan VLC/Python 32/64-bit. Jika `TIMEOUT` atau `ERROR`, periksa URL, user/password, port 554, dan izin RTSP kamera.
+
+## Alarms & Events
+
+Database dibuat otomatis pada saat aplikasi dijalankan:
+
+```text
+command_center_data/events.db
+```
+
+Event yang lebih lama dari 90 hari dibersihkan otomatis jika sudah tidak aktif. Alarm aktif tidak dihapus oleh proses retention.
+
+Severity:
+
+- `CRITICAL`: controller offline, mode SAFETY, green conflict, fault, atau konfigurasi tidak valid.
+- `WARNING`: mode HOLD/FLASHING, camera offline, atau status safety non-kritis.
+- `INFO`: kondisi pulih atau kembali normal.
+- `AUDIT`: aplikasi start/close dan perubahan pengaturan koneksi controller.
+
+`Acknowledge` hanya menandai bahwa alarm sudah diketahui operator. Acknowledge tidak menyelesaikan alarm dan tidak mengubah operasi ESP32-S3.
 
 ## Menghubungkan controller
 
@@ -103,3 +131,4 @@ File `cameras.json` tidak menyimpan password. Password disimpan melalui Credenti
 - Tidak ada perintah SKIP, HOLD, FLASHING, Safe Apply, atau perubahan konfigurasi traffic.
 - Stream kamera dihentikan ketika operator meninggalkan halaman Live View.
 - Controller tetap bekerja mandiri jika Command Center atau kamera terputus.
+- Database Event & Alarm hanya berada di PC Command Center dan tidak membebani ESP32-S3.

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal
@@ -62,6 +64,8 @@ class ControllerService(QObject):
         self._entries = _default_entries()
         self._endpoints: dict[str, str] = {}
         self._pending: dict[str, QNetworkReply] = {}
+        self._request_started: dict[str, float] = {}
+        self._next_request_at: dict[str, float] = {}
         self._failures: dict[str, int] = {}
         self.camera_repository = CameraRepository()
 
@@ -107,6 +111,8 @@ class ControllerService(QObject):
         for reply in self._pending.values():
             reply.abort()
         self._pending.clear()
+        self._request_started.clear()
+        self._next_request_at.clear()
         self._failures.clear()
 
         self.mode = selected_mode
@@ -173,16 +179,19 @@ class ControllerService(QObject):
         controller_id = controller.controller_id
         if controller_id in self._pending:
             return
+        if monotonic() < self._next_request_at.get(controller_id, 0.0):
+            return
         base_url = self._endpoints.get(controller_id, "")
         if not base_url:
             return
 
         request = QNetworkRequest(QUrl(f"{base_url}/api/status"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.4.2")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.01")
         request.setTransferTimeout(1800)
         reply = self._network.get(request)
         self._pending[controller_id] = reply
+        self._request_started[controller_id] = monotonic()
         reply.finished.connect(
             lambda current=reply, key=controller_id: self._status_finished(
                 key,
@@ -199,6 +208,12 @@ class ControllerService(QObject):
             reply.deleteLater()
             return
         self._pending.pop(controller_id, None)
+        started = self._request_started.pop(controller_id, None)
+        response_time_ms = (
+            max(0, round((monotonic() - started) * 1000))
+            if started is not None
+            else None
+        )
 
         error = reply.error()
         payload: dict[str, Any] | None = None
@@ -220,6 +235,12 @@ class ControllerService(QObject):
             return
 
         self._failures[controller_id] = 0
+        self._next_request_at[controller_id] = 0.0
+        snapshot.consecutive_failures = 0
+        snapshot.response_time_ms = response_time_ms
+        snapshot.last_update_at = datetime.now().astimezone().isoformat(
+            timespec="seconds"
+        )
         self._apply_status_payload(snapshot, payload)
         self.snapshot_updated.emit(controller_id)
 
@@ -227,6 +248,11 @@ class ControllerService(QObject):
         controller_id = snapshot.controller_id
         failures = self._failures.get(controller_id, 0) + 1
         self._failures[controller_id] = failures
+        retry_delays = (1, 2, 5, 10, 15)
+        retry_delay = retry_delays[min(failures - 1, len(retry_delays) - 1)]
+        self._next_request_at[controller_id] = monotonic() + retry_delay
+        snapshot.consecutive_failures = failures
+        snapshot.response_time_ms = None
         if failures >= 2:
             snapshot.online = False
             snapshot.mode = ControllerMode.OFFLINE
@@ -336,6 +362,9 @@ class ControllerService(QObject):
             snapshot.current_stage = 0
             snapshot.total_stages = 0
             snapshot.remaining_seconds = 0
+            snapshot.last_update_at = ""
+            snapshot.response_time_ms = None
+            snapshot.consecutive_failures = 0
             for signal_group in snapshot.signal_groups:
                 signal_group.aspect = "OFF"
             for camera in snapshot.cameras:

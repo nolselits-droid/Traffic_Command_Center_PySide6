@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 )
 
 from .controller_service import ControllerService
+from .event_service import EventService
+from .views.alarms_events_view import AlarmsEventsView
 from .views.camera_config_view import CameraConfigView
 from .views.controller_config_view import ControllerConfigView
 from .views.live_view import LiveView
@@ -28,11 +30,12 @@ from .widgets.common import muted_label, status_label
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Traffic Command Center V0.4 FIX2")
+        self.setWindowTitle("Traffic Command Center V0.5.01")
         self.setMinimumSize(1180, 700)
         self.resize(1600, 900)
 
         self.service = ControllerService(self)
+        self.event_service = EventService(self.service, self)
         self.pages: dict[str, QWidget] = {}
         self.nav_buttons: dict[str, QPushButton] = {}
 
@@ -43,6 +46,15 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
 
         root.addWidget(self._build_top_bar())
+        self.event_service.active_alarm_count_changed.connect(
+            self._update_alarm_badge
+        )
+        counts = self.event_service.summary()
+        self._update_alarm_badge(
+            counts["critical"],
+            counts["warning"],
+            counts["unacknowledged"],
+        )
 
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
@@ -60,7 +72,12 @@ class MainWindow(QMainWindow):
         self._update_global_status()
         self.navigate("overview")
         self.statusBar().showMessage(
-            "V0.4 FIX2 · stable camera layout + ESP32-S3 monitoring · Traffic Control disabled"
+            "V0.5.01 · persistent alarm/event monitoring · Traffic Control disabled"
+        )
+        self.event_service.record_audit(
+            "SYSTEM",
+            "Command Center",
+            "Command Center V0.5.01 started",
         )
 
         fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
@@ -79,7 +96,7 @@ class MainWindow(QMainWindow):
         identity.setSpacing(1)
         title = QLabel("TRAFFIC COMMAND CENTER")
         title.setObjectName("appTitle")
-        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.4 FIX2")
+        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.5.01")
         identity.addWidget(title)
         identity.addWidget(subtitle)
         layout.addLayout(identity)
@@ -87,6 +104,12 @@ class MainWindow(QMainWindow):
 
         self.global_status_label = status_label("● CONTROLLER STATUS")
         layout.addWidget(self.global_status_label)
+        self.alarm_button = QPushButton("ALARM 0")
+        self.alarm_button.setObjectName("alarmButton")
+        self.alarm_button.clicked.connect(
+            lambda checked=False: self.navigate("alarms")
+        )
+        layout.addWidget(self.alarm_button)
         operator = QVBoxLayout()
         operator.setSpacing(1)
         self.clock_label = QLabel()
@@ -144,9 +167,9 @@ class MainWindow(QMainWindow):
     def _create_pages(self) -> None:
         overview = OverviewView(self.service)
         overview.controller_open_requested.connect(self.open_controller)
-        live = LiveView(self.service)
+        live = LiveView(self.service, self.event_service)
         camera = CameraConfigView(self.service)
-        controllers = ControllerConfigView(self.service)
+        controllers = ControllerConfigView(self.service, self.event_service)
 
         self._add_page("overview", overview)
         self._add_page("live", live)
@@ -161,10 +184,7 @@ class MainWindow(QMainWindow):
         self._add_page("camera", camera)
         self._add_page(
             "alarms",
-            PlaceholderView(
-                "Alarms & Events",
-                "Offline, Green Conflict, Safety, Hold, Flashing dan audit operator akan dicatat di sini.",
-            ),
+            AlarmsEventsView(self.event_service, self.service),
         )
         self._add_page(
             "backup",
@@ -232,10 +252,32 @@ class MainWindow(QMainWindow):
                 self.stack.currentWidget() is live_view
             )
 
+    def _update_alarm_badge(
+        self,
+        critical: int,
+        warning: int,
+        unacknowledged: int,
+    ) -> None:
+        active = critical + warning
+        self.alarm_button.setText(
+            f"ALARM {active} · NEW {unacknowledged}"
+            if active
+            else "ALARM 0"
+        )
+        severity = "critical" if critical else "warning" if warning else "normal"
+        self.alarm_button.setProperty("severity", severity)
+        self.alarm_button.style().unpolish(self.alarm_button)
+        self.alarm_button.style().polish(self.alarm_button)
+
     def closeEvent(self, event) -> None:  # noqa: N802
         live_view = self.pages.get("live")
         if isinstance(live_view, LiveView):
             live_view.set_streaming_active(False)
+        self.event_service.record_audit(
+            "SYSTEM",
+            "Command Center",
+            "Command Center closed",
+        )
         super().closeEvent(event)
 
     def _toggle_fullscreen(self) -> None:

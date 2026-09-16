@@ -99,6 +99,7 @@ class ControllerRow(QFrame):
         self.connection_label = status_label("ONLINE")
         self.connection_label.setProperty("compact", True)
         self.camera_label = muted_label()
+        self.health_label = muted_label()
         self.open_button = QPushButton("OPEN")
         self.open_button.setObjectName("compactButton")
         self.open_button.clicked.connect(
@@ -106,6 +107,7 @@ class ControllerRow(QFrame):
         )
         actions.addWidget(self.connection_label)
         actions.addWidget(self.camera_label)
+        actions.addWidget(self.health_label)
         actions.addWidget(self.open_button)
         root.addLayout(actions, 1)
 
@@ -139,6 +141,23 @@ class ControllerRow(QFrame):
         self.camera_label.setText(
             f"Camera {snapshot.camera_online_count}/{snapshot.camera_enabled_count} online"
         )
+        if snapshot.last_update_at == "MOCK":
+            self.health_label.setText("MOCK DATA")
+        elif snapshot.response_time_ms is not None:
+            self.health_label.setText(
+                f"API {snapshot.response_time_ms} ms · errors "
+                f"{snapshot.consecutive_failures}"
+            )
+        elif snapshot.consecutive_failures:
+            self.health_label.setText(
+                f"API timeout · errors {snapshot.consecutive_failures}"
+            )
+        else:
+            self.health_label.setText("API waiting" if not snapshot.online else "API ready")
+        if snapshot.last_update_at:
+            self.health_label.setToolTip(
+                f"Last successful update: {snapshot.last_update_at}"
+            )
         self._update_signal_groups(snapshot)
 
         if not snapshot.online:

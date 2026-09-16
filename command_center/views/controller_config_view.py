@@ -15,13 +15,20 @@ from PySide6.QtWidgets import (
 )
 
 from ..controller_service import ControllerService
+from ..event_service import EventService
 from ..widgets.common import muted_label
 
 
 class ControllerConfigView(QWidget):
-    def __init__(self, service: ControllerService, parent=None) -> None:
+    def __init__(
+        self,
+        service: ControllerService,
+        event_service: EventService | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self.service = service
+        self.event_service = event_service
         self.enabled_inputs: list[QCheckBox] = []
         self.name_inputs: list[QLineEdit] = []
         self.url_inputs: list[QLineEdit] = []
@@ -134,6 +141,7 @@ class ControllerConfigView(QWidget):
 
     def _save_and_connect(self) -> None:
         mode = str(self.mode_input.currentData())
+        previous_mode = self.service.mode
         entries = []
         active_count = 0
         active_urls: set[str] = set()
@@ -170,7 +178,19 @@ class ControllerConfigView(QWidget):
             )
             return
 
+        if self.event_service:
+            self.event_service.reset_monitoring_state()
         self.service.apply_settings(mode, entries)
+        if self.event_service:
+            self.event_service.record_audit(
+                "SYSTEM",
+                "Command Center",
+                "Controller connection settings updated",
+                details=(
+                    f"Source: {previous_mode.upper()} -> {mode.upper()}; "
+                    f"enabled controllers: {active_count if mode == 'live' else 5}"
+                ),
+            )
         if mode == "live":
             self.result_label.setText(
                 f"LIVE API aktif untuk {active_count} controller · polling 1 detik · read-only."

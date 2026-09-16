@@ -62,6 +62,9 @@ class ControllerSnapshot:
     current_stage: int = 1
     total_stages: int = 4
     remaining_seconds: int = 30
+    last_update_at: str = ""
+    response_time_ms: int | None = None
+    consecutive_failures: int = 0
     active_signal_groups: int = 4
     signal_groups: list[SignalGroupState] = field(default_factory=list)
     cameras: list[CameraConfiguration] = field(default_factory=list)

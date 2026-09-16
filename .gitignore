@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
+command_center_data/*.db
+command_center_data/*.db-shm
+command_center_data/*.db-wal
+command_center_data/*.tmp
+

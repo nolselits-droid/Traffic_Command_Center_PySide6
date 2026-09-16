@@ -1,0 +1,36 @@
+{
+  "mode": "mock",
+  "pollIntervalMs": 1000,
+  "controllers": [
+    {
+      "controllerId": "TLC-001",
+      "displayName": "Controller 1",
+      "enabled": true,
+      "baseUrl": "http://192.168.10.21"
+    },
+    {
+      "controllerId": "TLC-002",
+      "displayName": "Controller 2",
+      "enabled": false,
+      "baseUrl": "http://192.168.10.22"
+    },
+    {
+      "controllerId": "TLC-003",
+      "displayName": "Controller 3",
+      "enabled": false,
+      "baseUrl": "http://192.168.10.23"
+    },
+    {
+      "controllerId": "TLC-004",
+      "displayName": "Controller 4",
+      "enabled": false,
+      "baseUrl": "http://192.168.10.24"
+    },
+    {
+      "controllerId": "TLC-005",
+      "displayName": "Controller 5",
+      "enabled": false,
+      "baseUrl": "http://192.168.10.25"
+    }
+  ]
+}

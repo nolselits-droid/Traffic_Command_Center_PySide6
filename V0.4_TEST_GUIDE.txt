@@ -1,0 +1,59 @@
+TRAFFIC COMMAND CENTER V0.4 FIX2 - STABLE CAMERA LAYOUT TEST
+======================================================
+
+A. PERSIAPAN
+1. Pastikan Command Center V0.3 sebelumnya dapat membaca ESP32-S3.
+2. Install VLC Media Player sesuai arsitektur Python.
+3. Pastikan RTSP camera aktif.
+4. Uji URL RTSP melalui VLC Media Player terlebih dahulu.
+
+B. INSTALL DEPENDENCY
+1. Aktifkan virtual environment.
+2. Jalankan:
+   python -m pip install -r requirements.txt
+
+C. SETTING CONTROLLER
+1. Jalankan python main.py.
+2. Buka CONTROLLERS.
+3. Pilih LIVE API dan hubungkan ESP32-S3.
+
+D. SETTING CAMERA
+1. Buka CAMERA CONFIGURATION.
+2. Pilih controller dan Camera SG1.
+3. Centang Enable camera.
+4. Masukkan IP, port 554, username, password, dan path RTSP.
+5. TEST CONNECTION harus membuka substream dalam jendela preview.
+6. PREVIEW harus membuka main stream fullscreen.
+7. SAVE CAMERA harus menyimpan konfigurasi.
+8. Ulangi untuk seluruh SG dan camera PTZ.
+
+E. LIVE VIEW
+1. Buka LIVE VIEW.
+2. Seluruh kamera enabled pada controller terpilih mulai connecting.
+3. Caption harus memperlihatkan CONNECTING, OPENING/BUFFERING, LIVE,
+   atau alasan RETRY/TIMEOUT; status tidak boleh hanya layar hitam.
+4. Double-click salah satu kamera.
+5. Kamera grid tersebut berhenti sementara dan main stream tampil fullscreen.
+6. Tekan ESC/CLOSE; substream grid harus kembali otomatis.
+7. Amati ukuran panel selama status berubah CONNECTING, OPENING/BUFFERING,
+   LIVE, RETRY, lalu LIVE kembali.
+8. Lebar camera tile dan Live Intersection Diagram tidak boleh berubah sendiri.
+9. Resize jendela secara manual; rasio panel harus kembali stabil 7:4 dan
+   hanya berubah ketika ukuran jendela memang diubah operator.
+
+F. BEBAN DAN PERGANTIAN CONTROLLER
+1. Pindah dari LIVE VIEW ke OVERVIEW.
+2. Semua stream harus berhenti.
+3. Kembali ke LIVE VIEW; stream harus tersambung lagi.
+4. Pilih controller berbeda; stream controller lama berhenti dan hanya
+   controller baru yang aktif.
+
+G. UJI OFFLINE
+1. Putus jaringan salah satu camera.
+2. Status berubah OFFLINE dan aplikasi mencoba lagi setiap 5 detik.
+3. Sambungkan camera kembali; status harus kembali LIVE tanpa restart aplikasi.
+
+H. KEAMANAN
+1. Tombol SKIP, HOLD, dan FLASHING tetap disabled dalam LIVE API.
+2. File cameras.json tidak boleh berisi password.
+3. Menutup Command Center tidak memengaruhi operasi ESP32-S3.

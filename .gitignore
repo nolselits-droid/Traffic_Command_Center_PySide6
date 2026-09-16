@@ -9,3 +9,7 @@ command_center_data/*.db-shm
 command_center_data/*.db-wal
 command_center_data/*.tmp
 
+
+# Local runtime configuration
+command_center_data/cameras.json
+command_center_data/controllers.json

@@ -1,0 +1,80 @@
+TRAFFIC COMMAND CENTER V0.5.02 - READ-ONLY TRAFFIC CONFIGURATION TEST
+==================================================================
+
+A. CHECKPOINT
+1. V0.5.01 sudah diuji untuk Event & Alarm, CSV, komunikasi, HOLD, dan FLASHING.
+2. Commit dasar: 51158df.
+3. Tag dasar: v0.5.01.
+4. V0.5.02 adalah test build; jangan membuat tag stable sebelum uji perangkat selesai.
+
+B. STARTUP DAN REGRESSION
+1. Aktifkan virtual environment.
+2. Install dependency: python -m pip install -r requirements.txt
+3. Jalankan: python main.py
+4. Top bar harus menampilkan V0.5.02.
+5. Overview, Live View, Controllers, Camera Configuration, serta Alarms & Events harus tetap normal.
+6. Kamera tidak boleh aktif atau berubah ukuran hanya karena membuka Traffic Configuration.
+
+C. LIVE API
+1. Buka CONTROLLERS.
+2. Pilih LIVE API dan masukkan Base URL controller firmware V1.23.1.
+3. Tekan SAVE & CONNECT dan pastikan controller ONLINE.
+4. Buka TRAFFIC CONFIGURATION.
+5. Pembacaan awal harus selesai tanpa mengubah operasi lampu.
+6. Status bawah harus menjadi CONFIGURATION READ SUCCESS - READ-ONLY.
+
+D. OVERVIEW
+1. Periksa Active SG, Defined Plans, Schedules, Holidays, revision, Apply State, dan Safety.
+2. Cocokkan nilainya dengan dashboard controller.
+3. Tabel Signal Group Names harus menampilkan 12 SG.
+4. SG di atas jumlah Active SG harus berstatus INACTIVE.
+5. Tekan REFRESH CONFIGURATION dan pastikan audit read-only tercatat.
+
+E. PLANS & STAGES
+1. Buka tab PLANS & STAGES.
+2. Daftar harus menampilkan Plan 01 sampai Plan 24 beserta jumlah Stage.
+3. Pilih Plan yang didefinisikan.
+4. Cocokkan nomor Stage, duration, dan state seluruh SG dengan controller.
+5. Plan yang tidak didefinisikan harus menampilkan Not defined dan tidak meminta data Stage.
+6. Klik beberapa Plan berurutan; aplikasi harus tetap responsif dan hanya menampilkan Plan terakhir yang dipilih.
+
+F. SCHEDULE
+1. Buka tab SCHEDULE.
+2. Pilih Sunday sampai Saturday dan Holiday satu per satu.
+3. Setiap kelompok harus menampilkan seluruh 24 slot.
+4. Slot terisi harus menampilkan waktu dan Plan yang tepat.
+5. Slot kosong harus menampilkan EMPTY.
+
+G. HOLIDAYS
+1. Buka tab HOLIDAYS.
+2. Seluruh 32 slot harus terlihat.
+3. Tanggal yang terisi harus cocok dengan controller.
+4. Slot yang tidak terisi harus menampilkan EMPTY.
+
+H. PERINGATAN DRAFT
+1. Pada web controller, buka Config Editor sehingga Draft aktif tanpa melakukan Save/Apply.
+2. Di Command Center tekan REFRESH CONFIGURATION.
+3. Banner harus berubah menjadi SOURCE: DRAFT dengan peringatan kuning.
+4. Data boleh mengikuti Draft, tetapi Command Center tidak boleh mengubah Draft tersebut.
+5. Tutup/batalkan Draft pada controller lalu Refresh kembali.
+6. Banner harus kembali menjadi SOURCE: CONFIG RAM.
+
+I. LOAD DAN NAVIGASI
+1. Saat tidak berada di Traffic Configuration, controller tidak boleh menerima rangkaian request konfigurasi.
+2. Buka Traffic Configuration; request awal harus berjalan satu per satu.
+3. Pindah ke halaman lain saat pembacaan berlangsung; request konfigurasi harus dibatalkan.
+4. Kembali ke Traffic Configuration; data harus dibaca ulang dengan benar.
+5. Ganti controller saat pembacaan berlangsung; data controller lama tidak boleh masuk ke layar controller baru.
+
+J. GANGGUAN KOMUNIKASI
+1. Putus LAN controller ketika berada di Traffic Configuration.
+2. Halaman harus menampilkan READ FAILED atau PARTIAL READ, tanpa crash.
+3. Alarms & Events tetap harus membuat alarm komunikasi sesuai V0.5.01.
+4. Sambungkan LAN kembali lalu tekan REFRESH CONFIGURATION.
+5. Data harus kembali tampil dan alarm komunikasi pulih.
+
+K. BATAS KEAMANAN
+1. Tidak boleh ada tombol edit, update, commit, save, restore, atau Safe Apply pada halaman ini.
+2. Tidak boleh ada perubahan Plan, Stage, Schedule, Holiday, NVS, output SG, atau mode traffic.
+3. Tombol SKIP, HOLD, dan FLASHING tetap disabled dalam LIVE API.
+4. Menutup Command Center tidak boleh memengaruhi controller.

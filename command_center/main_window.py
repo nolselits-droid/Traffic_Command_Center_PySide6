@@ -24,13 +24,14 @@ from .views.controller_config_view import ControllerConfigView
 from .views.live_view import LiveView
 from .views.overview_view import OverviewView
 from .views.placeholder_view import PlaceholderView
+from .views.traffic_config_view import TrafficConfigView
 from .widgets.common import muted_label, status_label
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Traffic Command Center V0.5.01")
+        self.setWindowTitle("Traffic Command Center V0.5.02")
         self.setMinimumSize(1180, 700)
         self.resize(1600, 900)
 
@@ -72,12 +73,12 @@ class MainWindow(QMainWindow):
         self._update_global_status()
         self.navigate("overview")
         self.statusBar().showMessage(
-            "V0.5.01 · persistent alarm/event monitoring · Traffic Control disabled"
+            "V0.5.02 · read-only Traffic Configuration · Traffic Control disabled"
         )
         self.event_service.record_audit(
             "SYSTEM",
             "Command Center",
-            "Command Center V0.5.01 started",
+            "Command Center V0.5.02 started",
         )
 
         fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
@@ -96,7 +97,7 @@ class MainWindow(QMainWindow):
         identity.setSpacing(1)
         title = QLabel("TRAFFIC COMMAND CENTER")
         title.setObjectName("appTitle")
-        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.5.01")
+        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.5.02")
         identity.addWidget(title)
         identity.addWidget(subtitle)
         layout.addLayout(identity)
@@ -176,10 +177,7 @@ class MainWindow(QMainWindow):
         self._add_page("controllers", controllers)
         self._add_page(
             "traffic",
-            PlaceholderView(
-                "Traffic Configuration",
-                "Plan, Stage, Schedule, Holiday dan Safe Apply akan diintegrasikan setelah monitoring read-only stabil.",
-            ),
+            TrafficConfigView(self.service, self.event_service),
         )
         self._add_page("camera", camera)
         self._add_page(
@@ -250,6 +248,11 @@ class MainWindow(QMainWindow):
         if isinstance(live_view, LiveView):
             live_view.set_streaming_active(
                 self.stack.currentWidget() is live_view
+            )
+        traffic_view = self.pages.get("traffic")
+        if isinstance(traffic_view, TrafficConfigView):
+            traffic_view.set_active(
+                self.stack.currentWidget() is traffic_view
             )
 
     def _update_alarm_badge(

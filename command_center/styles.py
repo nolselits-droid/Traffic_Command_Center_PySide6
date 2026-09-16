@@ -87,6 +87,45 @@ QFrame#controllerConfigGrid {
     border-radius: 8px;
 }
 
+QFrame#sourceBanner {
+    background-color: #102b22;
+    border: 1px solid #285c47;
+    border-radius: 8px;
+}
+
+QFrame#sourceBanner[draft="true"] {
+    background-color: #4a3510;
+    border-color: #8a681e;
+}
+
+QFrame#sourceBanner QLabel {
+    background-color: transparent;
+}
+
+QLabel#sourceLabel {
+    color: #8de0b1;
+    background-color: transparent;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QFrame#sourceBanner[draft="true"] QLabel#sourceLabel {
+    color: #ffd77b;
+}
+
+QLabel#readOnlyNote {
+    color: #b9d8f3;
+    background-color: #0c2940;
+    border: 1px solid #28567a;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+QLabel#configDetailValue {
+    color: #f2f7fc;
+    font-weight: 600;
+}
+
 QCheckBox {
     spacing: 7px;
     color: #dce8f5;
@@ -286,7 +325,8 @@ QComboBox QAbstractItemView {
     selection-background-color: #174c79;
 }
 
-QTableWidget#eventTable {
+QTableWidget#eventTable,
+QTableWidget#configTable {
     color: #dce8f5;
     background-color: #0b1724;
     alternate-background-color: #101e2e;
@@ -297,8 +337,53 @@ QTableWidget#eventTable {
     selection-color: #ffffff;
 }
 
-QTableWidget#eventTable::item {
+QTableWidget#eventTable::item,
+QTableWidget#configTable::item {
     padding: 5px;
+}
+
+QTabWidget#trafficConfigTabs::pane {
+    background-color: #0a1624;
+    border: 1px solid #2a3d52;
+    border-radius: 8px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    color: #9fb0c2;
+    background-color: #0d1a29;
+    border: 1px solid #26374a;
+    padding: 8px 14px;
+    min-width: 105px;
+}
+
+QTabBar::tab:selected {
+    color: #ffffff;
+    background-color: #174c79;
+    border-color: #2d78b5;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #15283a;
+}
+
+QListWidget#planList {
+    color: #dce8f5;
+    background-color: #0b1724;
+    alternate-background-color: #101e2e;
+    border: 1px solid #2a3d52;
+    border-radius: 8px;
+    outline: none;
+}
+
+QListWidget#planList::item {
+    min-height: 27px;
+    padding: 3px 8px;
+}
+
+QListWidget#planList::item:selected {
+    color: #ffffff;
+    background-color: #174c79;
 }
 
 QHeaderView::section {

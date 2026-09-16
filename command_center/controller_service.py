@@ -97,6 +97,10 @@ class ControllerService(QObject):
     def registry_entries(self) -> list[dict[str, Any]]:
         return deepcopy(self._entries)
 
+    def base_url(self, controller_id: str) -> str:
+        """Return the configured controller URL without exposing registry internals."""
+        return self._endpoints.get(controller_id, "")
+
     def apply_settings(
         self,
         mode: str,
@@ -187,7 +191,7 @@ class ControllerService(QObject):
 
         request = QNetworkRequest(QUrl(f"{base_url}/api/status"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.01")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.02")
         request.setTransferTimeout(1800)
         reply = self._network.get(request)
         self._pending[controller_id] = reply

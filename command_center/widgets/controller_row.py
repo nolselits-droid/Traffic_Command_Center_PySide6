@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from time import monotonic
+
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -8,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..models import ControllerMode, ControllerSnapshot
@@ -25,16 +28,37 @@ class SignalMiniTile(QFrame):
         self.value_label = QLabel()
         self.value_label.setObjectName("signalMiniLamp")
         self.value_label.setFixedSize(14, 14)
+        self._aspect = "OFF"
+        self._displayed_aspect = ""
         layout.addWidget(self.name_label)
         layout.addWidget(self.value_label)
         self.set_aspect(aspect)
 
     def set_aspect(self, aspect: str) -> None:
         normalized = aspect.upper() if aspect else "OFF"
-        if normalized not in {"GREEN", "YELLOW", "RED", "OFF"}:
+        if normalized not in {
+            "GREEN", "YELLOW", "RED", "OFF", "RED + YELLOW",
+            "FLASH YELLOW 500", "FLASH YELLOW 1000",
+        }:
             normalized = "OFF"
+        self._aspect = normalized
         self.value_label.setToolTip(normalized.title())
-        self.value_label.setProperty("aspect", normalized)
+        self.refresh_animation()
+
+    def refresh_animation(self, now: float | None = None) -> None:
+        timestamp = monotonic() if now is None else now
+        displayed = self._aspect
+        if self._aspect.startswith("FLASH YELLOW"):
+            period_ms = 1000 if self._aspect.endswith("1000") else 500
+            displayed = (
+                "YELLOW" if int(timestamp * 1000 / period_ms) % 2 == 0 else "OFF"
+            )
+        elif self._aspect == "RED + YELLOW":
+            displayed = "YELLOW"
+        if displayed == self._displayed_aspect:
+            return
+        self._displayed_aspect = displayed
+        self.value_label.setProperty("aspect", displayed)
         self.value_label.style().unpolish(self.value_label)
         self.value_label.style().polish(self.value_label)
 
@@ -94,12 +118,22 @@ class ControllerRow(QFrame):
         signal_area.addLayout(self.signal_grid)
         root.addLayout(signal_area, 4)
 
-        actions = QVBoxLayout()
+        action_panel = QWidget()
+        action_panel.setFixedWidth(174)
+        actions = QVBoxLayout(action_panel)
+        actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(6)
         self.connection_label = status_label("ONLINE")
         self.connection_label.setProperty("compact", True)
         self.camera_label = muted_label()
         self.health_label = muted_label()
+        for label in (
+            self.connection_label,
+            self.camera_label,
+            self.health_label,
+        ):
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setFixedWidth(174)
         self.open_button = QPushButton("OPEN")
         self.open_button.setObjectName("compactButton")
         self.open_button.clicked.connect(
@@ -109,7 +143,7 @@ class ControllerRow(QFrame):
         actions.addWidget(self.camera_label)
         actions.addWidget(self.health_label)
         actions.addWidget(self.open_button)
-        root.addLayout(actions, 1)
+        root.addWidget(action_panel, 0)
 
         self.update_snapshot(snapshot)
 
@@ -189,3 +223,7 @@ class ControllerRow(QFrame):
 
         for tile, signal_group in zip(self.signal_tiles, snapshot.signal_groups):
             tile.set_aspect(signal_group.aspect)
+
+    def refresh_signal_animation(self, now: float | None = None) -> None:
+        for tile in self.signal_tiles:
+            tile.refresh_animation(now)

@@ -51,7 +51,7 @@ def _normalise_base_url(value: str) -> str:
 
 
 class ControllerService(QObject):
-    """Provides mock data or read-only HTTP monitoring for up to five TLCs."""
+    """Provides monitoring and configuration access for up to five TLCs."""
 
     snapshot_updated = Signal(str)
     controllers_changed = Signal()
@@ -67,6 +67,7 @@ class ControllerService(QObject):
         self._request_started: dict[str, float] = {}
         self._next_request_at: dict[str, float] = {}
         self._failures: dict[str, int] = {}
+        self._poll_suspended: dict[str, set[str]] = {}
         self.camera_repository = CameraRepository()
 
         self._network = QNetworkAccessManager(self)
@@ -118,6 +119,7 @@ class ControllerService(QObject):
         self._request_started.clear()
         self._next_request_at.clear()
         self._failures.clear()
+        self._poll_suspended.clear()
 
         self.mode = selected_mode
         self._entries = normalised_entries
@@ -143,6 +145,39 @@ class ControllerService(QObject):
         if not self.is_live:
             return
         for controller in self.controllers:
+            self._request_status(controller)
+
+    def suspend_polling(self, controller_id: str, owner: str = "request") -> None:
+        """Temporarily stop status polling while a transactional API is active."""
+        self._poll_suspended.setdefault(controller_id, set()).add(owner)
+        # ESP32 web server handles requests conservatively. Abort a monitoring
+        # GET that is still in flight so the operator transaction gets the
+        # connection immediately; the late finished signal is ignored.
+        reply = self._pending.pop(controller_id, None)
+        self._request_started.pop(controller_id, None)
+        if reply is not None:
+            reply.abort()
+
+    def resume_polling(
+        self,
+        controller_id: str,
+        *,
+        owner: str = "request",
+        refresh: bool = True,
+    ) -> None:
+        owners = self._poll_suspended.get(controller_id, set())
+        owners.discard(owner)
+        if not owners:
+            self._poll_suspended.pop(controller_id, None)
+        if refresh and self.is_live and controller_id not in self._poll_suspended:
+            QTimer.singleShot(
+                120,
+                lambda key=controller_id: self._request_status_by_id(key),
+            )
+
+    def _request_status_by_id(self, controller_id: str) -> None:
+        controller = self.get_controller(controller_id)
+        if controller:
             self._request_status(controller)
 
     def _tick(self) -> None:
@@ -181,6 +216,8 @@ class ControllerService(QObject):
 
     def _request_status(self, controller: ControllerSnapshot) -> None:
         controller_id = controller.controller_id
+        if self._poll_suspended.get(controller_id):
+            return
         if controller_id in self._pending:
             return
         if monotonic() < self._next_request_at.get(controller_id, 0.0):
@@ -191,7 +228,7 @@ class ControllerService(QObject):
 
         request = QNetworkRequest(QUrl(f"{base_url}/api/status"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.02")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.03")
         request.setTransferTimeout(1800)
         reply = self._network.get(request)
         self._pending[controller_id] = reply
@@ -304,6 +341,31 @@ class ControllerService(QObject):
         snapshot.remaining_seconds = max(
             0,
             self._safe_int(payload.get("remaining"), 0),
+        )
+        snapshot.config_revision = max(
+            0,
+            self._safe_int(payload.get("configRevision"), 0),
+        )
+        snapshot.runtime_revision = max(
+            0,
+            self._safe_int(payload.get("runtimeRevision"), 0),
+        )
+        snapshot.apply_state = str(payload.get("apply") or "UNKNOWN")
+        controls = payload.get("controls")
+        if not isinstance(controls, dict):
+            controls = {}
+        snapshot.hold_active = bool(controls.get("hold", False))
+        snapshot.web_hold_active = bool(controls.get("webHold", False))
+        snapshot.hold_remaining_seconds = max(
+            0, self._safe_int(controls.get("holdRemaining"), 0)
+        )
+        snapshot.skip_pending = bool(controls.get("skipPending", False))
+        snapshot.flashing_active = bool(controls.get("flashing", False))
+        snapshot.web_flashing_active = bool(
+            controls.get("webFlashing", False)
+        )
+        snapshot.local_flashing_active = bool(
+            controls.get("localFlashing", False)
         )
 
         raw_states = payload.get("sg")
@@ -459,7 +521,7 @@ class ControllerService(QObject):
             1: "RED",
             2: "YELLOW",
             3: "GREEN",
-            4: "YELLOW",
-            5: "YELLOW",
-            6: "YELLOW",
+            4: "FLASH YELLOW 500",
+            5: "FLASH YELLOW 1000",
+            6: "RED + YELLOW",
         }.get(value, "OFF")

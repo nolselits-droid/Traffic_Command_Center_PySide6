@@ -5,8 +5,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
+from urllib.parse import urlencode
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Signal
+from PySide6.QtCore import QByteArray, QObject, QTimer, QUrl, Signal
 from PySide6.QtNetwork import (
     QNetworkAccessManager,
     QNetworkReply,
@@ -28,9 +29,22 @@ SIGNAL_STATE_NAMES = {
 
 
 @dataclass(slots=True)
+class EditorError:
+    code: int = 0
+    text: str = ""
+    plan: int = 0
+    stage: int = 0
+    signal_group: int = 0
+    conflict_a: int = 0
+    conflict_b: int = 0
+
+
+@dataclass(slots=True)
 class TrafficEditorStatus:
     editing: bool
     modified: bool
+    validation_checked: bool
+    validation_valid: bool
     config_dirty: bool
     config_revision: int
     runtime_revision: int
@@ -42,6 +56,7 @@ class TrafficEditorStatus:
     schedule_count: int
     holiday_count: int
     conflict_count: int
+    error: EditorError = field(default_factory=EditorError)
     loaded_at: str = field(default_factory=lambda: _timestamp())
 
 
@@ -117,11 +132,28 @@ class HolidaysConfig:
     entries: list[HolidayConfig]
 
 
+@dataclass(slots=True)
+class EditorActionResult:
+    ok: bool
+    action: str
+    message: str
+    editing: bool
+    modified: bool
+    config_dirty: bool
+    config_revision: int
+    runtime_revision: int
+    validation_checked: bool
+    validation_valid: bool
+    error: EditorError
+
+
 def parse_editor_status(payload: dict[str, Any]) -> TrafficEditorStatus:
     _require_ok(payload)
     return TrafficEditorStatus(
         editing=bool(payload.get("editing", False)),
         modified=bool(payload.get("modified", False)),
+        validation_checked=bool(payload.get("validationChecked", False)),
+        validation_valid=bool(payload.get("validationValid", False)),
         config_dirty=bool(payload.get("configDirty", False)),
         config_revision=_safe_int(payload.get("configRevision"), 0),
         runtime_revision=_safe_int(payload.get("runtimeRevision"), 0),
@@ -133,6 +165,7 @@ def parse_editor_status(payload: dict[str, Any]) -> TrafficEditorStatus:
         schedule_count=max(0, _safe_int(payload.get("scheduleCount"), 0)),
         holiday_count=max(0, _safe_int(payload.get("holidayCount"), 0)),
         conflict_count=max(0, _safe_int(payload.get("conflictCount"), 0)),
+        error=_parse_editor_error(payload.get("error")),
     )
 
 
@@ -250,6 +283,26 @@ def parse_holidays(payload: dict[str, Any]) -> HolidaysConfig:
     )
 
 
+def parse_action_result(payload: dict[str, Any]) -> EditorActionResult:
+    error = _parse_editor_error(payload.get("error"))
+    message = str(payload.get("message") or "")
+    if not message and error.text:
+        message = error.text
+    return EditorActionResult(
+        ok=bool(payload.get("ok", False)),
+        action=str(payload.get("action") or "UNKNOWN"),
+        message=message,
+        editing=bool(payload.get("editing", False)),
+        modified=bool(payload.get("modified", False)),
+        config_dirty=bool(payload.get("configDirty", False)),
+        config_revision=_safe_int(payload.get("configRevision"), 0),
+        runtime_revision=_safe_int(payload.get("runtimeRevision"), 0),
+        validation_checked=bool(payload.get("validationChecked", False)),
+        validation_valid=bool(payload.get("validationValid", False)),
+        error=error,
+    )
+
+
 class TrafficConfigService(QObject):
     status_loaded = Signal(str, object)
     system_loaded = Signal(str, object)
@@ -257,6 +310,7 @@ class TrafficConfigService(QObject):
     plan_loaded = Signal(str, int, object)
     schedule_loaded = Signal(str, int, object)
     holidays_loaded = Signal(str, object)
+    action_completed = Signal(str, str, object)
     request_failed = Signal(str, str, str)
     busy_changed = Signal(bool)
 
@@ -269,7 +323,7 @@ class TrafficConfigService(QObject):
         self.controller_service = controller_service
         self._network = QNetworkAccessManager(self)
         self._queue: deque[
-            tuple[str, str, str, Callable[[dict[str, Any]], Any], int]
+            tuple[str, str, str, str, Callable[[dict[str, Any]], Any], int]
         ] = deque()
         self._reply: QNetworkReply | None = None
         self._current_key: tuple[str, str] | None = None
@@ -308,6 +362,26 @@ class TrafficConfigService(QObject):
             self._start_next()
         else:
             self._load_mock_initial(controller_id)
+
+    def load_status(self, controller_id: str) -> None:
+        if self.controller_service.is_live:
+            self._enqueue(
+                controller_id,
+                "status",
+                "/api/editor/status",
+                parse_editor_status,
+            )
+            self._start_next()
+
+    def load_plans(self, controller_id: str) -> None:
+        if self.controller_service.is_live:
+            self._enqueue(
+                controller_id,
+                "plans",
+                "/api/editor/plans",
+                parse_plans_index,
+            )
+            self._start_next()
 
     def load_plan(self, controller_id: str, plan_number: int) -> None:
         if not 1 <= plan_number <= 24:
@@ -371,12 +445,179 @@ class TrafficConfigService(QObject):
                 ),
             )
 
+    def begin_edit(self, controller_id: str) -> None:
+        self._enqueue_action(controller_id, "start", "/api/editor/start")
+
+    def cancel_edit(self, controller_id: str) -> None:
+        self._enqueue_action(controller_id, "cancel", "/api/editor/cancel")
+
+    def validate_edit(self, controller_id: str) -> None:
+        self._enqueue_action(
+            controller_id,
+            "validate",
+            "/api/editor/validate",
+        )
+
+    def save_edit(self, controller_id: str) -> None:
+        self._enqueue_action(controller_id, "save", "/api/operator/save")
+
+    def save_and_apply(self, controller_id: str) -> None:
+        self._enqueue_action(
+            controller_id,
+            "save-apply",
+            "/api/operator/save-apply",
+        )
+
+    def apply_saved(self, controller_id: str) -> None:
+        self._enqueue_action(controller_id, "apply", "/api/runtime/apply")
+
+    def update_stage_count(
+        self,
+        controller_id: str,
+        plan_number: int,
+        count: int,
+    ) -> None:
+        query = urlencode({"plan": plan_number, "count": count})
+        self._enqueue_action(
+            controller_id,
+            "stage-count",
+            f"/api/editor/plan/stage-count?{query}",
+        )
+
+    def clear_plan(self, controller_id: str, plan_number: int) -> None:
+        query = urlencode({"plan": plan_number})
+        self._enqueue_action(
+            controller_id,
+            "plan-clear",
+            f"/api/editor/plan/clear?{query}",
+        )
+
+    def update_stage(
+        self,
+        controller_id: str,
+        plan_number: int,
+        stage_number: int,
+        duration_seconds: int,
+        signal_states: list[int],
+    ) -> None:
+        params: dict[str, int] = {
+            "plan": plan_number,
+            "stage": stage_number,
+            "duration": duration_seconds,
+        }
+        normalized = list(signal_states[:12])
+        normalized.extend([0] * (12 - len(normalized)))
+        for index, value in enumerate(normalized, 1):
+            params[f"sg{index}"] = value
+        self._enqueue_action(
+            controller_id,
+            "stage-update",
+            f"/api/editor/stage?{urlencode(params)}",
+        )
+
+    def update_schedule(
+        self,
+        controller_id: str,
+        day: int,
+        slot: int,
+        plan_number: int,
+        hour: int,
+        minute: int,
+    ) -> None:
+        query = urlencode(
+            {
+                "day": day,
+                "slot": slot,
+                "plan": plan_number,
+                "hour": hour,
+                "minute": minute,
+            }
+        )
+        self._enqueue_action(
+            controller_id,
+            "schedule-update",
+            f"/api/editor/schedule?{query}",
+        )
+
+    def clear_schedule(self, controller_id: str, day: int, slot: int) -> None:
+        query = urlencode({"day": day, "slot": slot})
+        self._enqueue_action(
+            controller_id,
+            "schedule-clear",
+            f"/api/editor/schedule/clear?{query}",
+        )
+
+    def update_holiday(
+        self,
+        controller_id: str,
+        slot: int,
+        day: int,
+        month: int,
+        year: int,
+    ) -> None:
+        query = urlencode(
+            {"slot": slot, "day": day, "month": month, "year": year}
+        )
+        self._enqueue_action(
+            controller_id,
+            "holiday-update",
+            f"/api/editor/holiday?{query}",
+        )
+
+    def clear_holiday(self, controller_id: str, slot: int) -> None:
+        query = urlencode({"slot": slot})
+        self._enqueue_action(
+            controller_id,
+            "holiday-clear",
+            f"/api/editor/holiday/clear?{query}",
+        )
+
+    def _enqueue_action(
+        self,
+        controller_id: str,
+        resource: str,
+        endpoint: str,
+    ) -> None:
+        if not self.controller_service.is_live:
+            result = EditorActionResult(
+                ok=False,
+                action=resource.upper(),
+                message="Perubahan konfigurasi hanya tersedia dalam LIVE API.",
+                editing=False,
+                modified=False,
+                config_dirty=False,
+                config_revision=0,
+                runtime_revision=0,
+                validation_checked=False,
+                validation_valid=False,
+                error=EditorError(),
+            )
+            QTimer.singleShot(
+                0,
+                lambda: self.action_completed.emit(
+                    controller_id,
+                    resource,
+                    result,
+                ),
+            )
+            return
+        self._enqueue(
+            controller_id,
+            f"action:{resource}",
+            endpoint,
+            parse_action_result,
+            method="POST",
+        )
+        self._start_next()
+
     def _enqueue(
         self,
         controller_id: str,
         resource: str,
         endpoint: str,
         parser: Callable[[dict[str, Any]], Any],
+        *,
+        method: str = "GET",
     ) -> None:
         duplicate = any(
             item[0] == controller_id and item[1] == resource
@@ -385,7 +626,14 @@ class TrafficConfigService(QObject):
         if duplicate or self._current_key == (controller_id, resource):
             return
         self._queue.append(
-            (controller_id, resource, endpoint, parser, self._generation)
+            (
+                controller_id,
+                resource,
+                method,
+                endpoint,
+                parser,
+                self._generation,
+            )
         )
 
     def _drop_queued(self, controller_id: str, resource_prefix: str) -> None:
@@ -403,7 +651,14 @@ class TrafficConfigService(QObject):
             if not self._reply and not self._queue:
                 self.busy_changed.emit(False)
             return
-        controller_id, resource, endpoint, parser, generation = self._queue.popleft()
+        (
+            controller_id,
+            resource,
+            method,
+            endpoint,
+            parser,
+            generation,
+        ) = self._queue.popleft()
         if generation != self._generation:
             return self._start_next()
         base_url = self.controller_service.base_url(controller_id)
@@ -417,9 +672,13 @@ class TrafficConfigService(QObject):
         self.busy_changed.emit(True)
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.02")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.03")
         request.setTransferTimeout(3500)
-        reply = self._network.get(request)
+        reply = (
+            self._network.post(request, QByteArray())
+            if method == "POST"
+            else self._network.get(request)
+        )
         self._reply = reply
         self._current_key = (controller_id, resource)
         reply.finished.connect(
@@ -450,6 +709,24 @@ class TrafficConfigService(QObject):
         error = reply.error()
         raw = bytes(reply.readAll()).decode("utf-8", errors="replace")
         reply.deleteLater()
+        payload: dict[str, Any] | None = None
+        if raw:
+            try:
+                decoded = json.loads(raw)
+                if isinstance(decoded, dict):
+                    payload = decoded
+            except json.JSONDecodeError:
+                payload = None
+
+        if resource.startswith("action:") and payload is not None:
+            try:
+                result = parser(payload)
+            except ValueError as exc:
+                self.request_failed.emit(controller_id, resource, str(exc))
+                return self._start_next()
+            self._emit_result(controller_id, resource, result)
+            return self._start_next()
+
         if error != QNetworkReply.NetworkError.NoError:
             error_name = getattr(error, "name", str(error))
             self.request_failed.emit(
@@ -459,11 +736,10 @@ class TrafficConfigService(QObject):
             )
             return self._start_next()
         try:
-            payload = json.loads(raw)
-            if not isinstance(payload, dict):
+            if payload is None:
                 raise ValueError("Root JSON bukan object.")
             result = parser(payload)
-        except (json.JSONDecodeError, ValueError) as exc:
+        except ValueError as exc:
             self.request_failed.emit(controller_id, resource, str(exc))
             return self._start_next()
         self._emit_result(controller_id, resource, result)
@@ -490,11 +766,19 @@ class TrafficConfigService(QObject):
             )
         elif resource == "holidays":
             self.holidays_loaded.emit(controller_id, result)
+        elif resource.startswith("action:"):
+            self.action_completed.emit(
+                controller_id,
+                resource.split(":", 1)[1],
+                result,
+            )
 
     def _load_mock_initial(self, controller_id: str) -> None:
         status = TrafficEditorStatus(
             editing=False,
             modified=False,
+            validation_checked=False,
+            validation_valid=False,
             config_dirty=False,
             config_revision=12,
             runtime_revision=12,
@@ -584,6 +868,19 @@ def _mock_holidays() -> HolidaysConfig:
 def _require_ok(payload: dict[str, Any]) -> None:
     if payload.get("ok") is False:
         raise ValueError(str(payload.get("message") or "Controller menolak request."))
+
+
+def _parse_editor_error(value: Any) -> EditorError:
+    payload = value if isinstance(value, dict) else {}
+    return EditorError(
+        code=_safe_int(payload.get("code"), 0),
+        text=str(payload.get("text") or ""),
+        plan=_safe_int(payload.get("plan"), 0),
+        stage=_safe_int(payload.get("stage"), 0),
+        signal_group=_safe_int(payload.get("sg"), 0),
+        conflict_a=_safe_int(payload.get("conflictA"), 0),
+        conflict_b=_safe_int(payload.get("conflictB"), 0),
+    )
 
 
 def _safe_int(value: Any, fallback: int) -> int:

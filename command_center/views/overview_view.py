@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from time import monotonic
+
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -56,7 +58,16 @@ class OverviewView(QWidget):
 
         self.service.snapshot_updated.connect(self._update_controller)
         self.service.controllers_changed.connect(self._rebuild_rows)
+        self.flash_timer = QTimer(self)
+        self.flash_timer.setInterval(100)
+        self.flash_timer.timeout.connect(self._refresh_signal_animation)
+        self.flash_timer.start()
         self._rebuild_rows()
+
+    def _refresh_signal_animation(self) -> None:
+        now = monotonic()
+        for row in self.rows.values():
+            row.refresh_signal_animation(now)
 
     def _rebuild_rows(self) -> None:
         while self.rows_layout.count():

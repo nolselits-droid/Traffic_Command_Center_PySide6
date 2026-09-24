@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from .controller_service import ControllerService
 from .event_service import EventService
 from .views.alarms_events_view import AlarmsEventsView
+from .views.backup_restore_view import BackupRestoreView
 from .views.camera_config_view import CameraConfigView
 from .views.controller_config_view import ControllerConfigView
 from .views.live_view import LiveView
@@ -31,7 +32,7 @@ from .widgets.common import muted_label, status_label
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Traffic Command Center V0.5.02")
+        self.setWindowTitle("Traffic Command Center V0.5.03")
         self.setMinimumSize(1180, 700)
         self.resize(1600, 900)
 
@@ -73,12 +74,12 @@ class MainWindow(QMainWindow):
         self._update_global_status()
         self.navigate("overview")
         self.statusBar().showMessage(
-            "V0.5.02 · read-only Traffic Configuration · Traffic Control disabled"
+            "V0.5.03 · Traffic Configuration · Traffic Control · Backup & Restore"
         )
         self.event_service.record_audit(
             "SYSTEM",
             "Command Center",
-            "Command Center V0.5.02 started",
+            "Command Center V0.5.03 started",
         )
 
         fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
@@ -97,7 +98,7 @@ class MainWindow(QMainWindow):
         identity.setSpacing(1)
         title = QLabel("TRAFFIC COMMAND CENTER")
         title.setObjectName("appTitle")
-        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.5.02")
+        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.5.03")
         identity.addWidget(title)
         identity.addWidget(subtitle)
         layout.addLayout(identity)
@@ -111,11 +112,15 @@ class MainWindow(QMainWindow):
             lambda checked=False: self.navigate("alarms")
         )
         layout.addWidget(self.alarm_button)
+        layout.addSpacing(22)
         operator = QVBoxLayout()
         operator.setSpacing(1)
         self.clock_label = QLabel()
+        self.clock_label.setObjectName("headerClock")
+        self.clock_label.setFixedWidth(270)
         self.clock_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         operator_label = muted_label("Operator Pusat")
+        operator_label.setFixedWidth(270)
         operator_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         operator.addWidget(self.clock_label)
         operator.addWidget(operator_label)
@@ -186,10 +191,7 @@ class MainWindow(QMainWindow):
         )
         self._add_page(
             "backup",
-            PlaceholderView(
-                "Backup & Restore",
-                "Full Restore dan Traffic & Operational Settings Restore akan menggunakan file dari PC.",
-            ),
+            BackupRestoreView(self.service, self.event_service),
         )
         self._add_page(
             "users",
@@ -273,6 +275,13 @@ class MainWindow(QMainWindow):
         self.alarm_button.style().polish(self.alarm_button)
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        traffic_view = self.pages.get("traffic")
+        if (
+            isinstance(traffic_view, TrafficConfigView)
+            and not traffic_view.confirm_application_close()
+        ):
+            event.ignore()
+            return
         live_view = self.pages.get("live")
         if isinstance(live_view, LiveView):
             live_view.set_streaming_active(False)

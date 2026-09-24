@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from time import monotonic
+
+from PySide6.QtCore import QPointF, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -20,6 +22,9 @@ class IntersectionDiagram(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._signal_groups: list[SignalGroupState] = []
+        self._flash_timer = QTimer(self)
+        self._flash_timer.setInterval(100)
+        self._flash_timer.timeout.connect(self.update)
         self.setMinimumSize(300, 300)
         self.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -28,6 +33,14 @@ class IntersectionDiagram(QWidget):
 
     def set_signal_groups(self, signal_groups: list[SignalGroupState]) -> None:
         self._signal_groups = signal_groups
+        flashing = any(
+            item.aspect.upper().startswith("FLASH YELLOW")
+            for item in signal_groups
+        )
+        if flashing and not self._flash_timer.isActive():
+            self._flash_timer.start()
+        elif not flashing:
+            self._flash_timer.stop()
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -211,10 +224,21 @@ class IntersectionDiagram(QWidget):
 
         aspects = ["RED", "YELLOW", "GREEN"]
         active_aspect = signal_group.aspect.upper()
+        if active_aspect.startswith("FLASH YELLOW"):
+            period_ms = 1000 if active_aspect.endswith("1000") else 500
+            active_aspect = (
+                "YELLOW"
+                if int(monotonic() * 1000 / period_ms) % 2 == 0
+                else "OFF"
+            )
         for index, aspect in enumerate(aspects):
+            aspect_active = active_aspect == aspect or (
+                active_aspect == "RED + YELLOW"
+                and aspect in {"RED", "YELLOW"}
+            )
             color = (
                 self.ASPECT_COLORS[aspect]
-                if active_aspect == aspect
+                if aspect_active
                 else QColor("#26313b")
             )
             painter.setPen(QPen(QColor("#596775"), 1))

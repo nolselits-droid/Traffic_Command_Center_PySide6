@@ -61,7 +61,7 @@ class ControllerConfigView(QWidget):
         mode_label.setObjectName("sectionTitle")
         self.mode_input = QComboBox()
         self.mode_input.addItem("MOCK DATA · simulasi lokal", "mock")
-        self.mode_input.addItem("LIVE API · ESP32-S3 read-only", "live")
+        self.mode_input.addItem("LIVE API · ESP32-S3", "live")
         self.mode_input.currentIndexChanged.connect(self._mode_changed)
         mode_row.addWidget(mode_label)
         mode_row.addStretch()
@@ -193,7 +193,7 @@ class ControllerConfigView(QWidget):
             )
         if mode == "live":
             self.result_label.setText(
-                f"LIVE API aktif untuk {active_count} controller · polling 1 detik · read-only."
+                f"LIVE API aktif untuk {active_count} controller · polling 1 detik · Traffic Control guarded."
             )
         else:
             self.result_label.setText(

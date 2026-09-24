@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..controller_service import ControllerService
+from ..control_service import ControlService
 from ..event_service import EventService
 from ..models import CameraConfiguration, CameraRole, ControllerMode, ControllerSnapshot
 from ..vlc_player import (
@@ -243,11 +245,13 @@ class LiveView(QWidget):
         super().__init__(parent)
         self.service = service
         self.event_service = event_service
+        self.control_service = ControlService(service, self)
         self.current_controller_id = (
             service.controllers[0].controller_id if service.controllers else ""
         )
         self.camera_tiles: list[CameraTile] = []
-        self.command_buttons: list[QPushButton] = []
+        self.command_buttons: dict[str, QPushButton] = {}
+        self._control_busy = False
         self.streaming_active = False
 
         root = QVBoxLayout(self)
@@ -283,6 +287,7 @@ class LiveView(QWidget):
         self.stage_metric = MetricCell("Current Stage")
         self.scheduled_plan_metric = MetricCell("Scheduled Plan")
         self.remaining_metric = MetricCell("Remaining Time")
+        self.revision_metric = MetricCell("Config / Runtime Rev")
         for metric in [
             self.mode_metric,
             self.safety_metric,
@@ -292,6 +297,18 @@ class LiveView(QWidget):
             self.remaining_metric,
         ]:
             summary_layout.addWidget(metric, 1)
+        self.revision_metric.setMinimumWidth(168)
+        self.revision_metric.value_label.setProperty(
+            "revisionState",
+            "unknown",
+        )
+        self.revision_metric.value_label.style().unpolish(
+            self.revision_metric.value_label
+        )
+        self.revision_metric.value_label.style().polish(
+            self.revision_metric.value_label
+        )
+        summary_layout.addWidget(self.revision_metric, 2)
         root.addWidget(self.summary_frame)
 
         body = QHBoxLayout()
@@ -359,10 +376,10 @@ class LiveView(QWidget):
             if command == "FLASHING":
                 button.setObjectName("dangerButton")
             button.clicked.connect(
-                lambda checked=False, value=command: self._mock_command(value)
+                lambda checked=False, value=command: self._control_command(value)
             )
             command_row.addWidget(button, 0, column)
-            self.command_buttons.append(button)
+            self.command_buttons[command] = button
         control_layout.addLayout(command_row)
         self.command_message = muted_label("Traffic Control ready · MOCK MODE")
         self.command_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -374,6 +391,9 @@ class LiveView(QWidget):
 
         self.service.snapshot_updated.connect(self._snapshot_updated)
         self.service.controllers_changed.connect(self._controllers_changed)
+        self.control_service.completed.connect(self._control_completed)
+        self.control_service.failed.connect(self._control_failed)
+        self.control_service.busy_changed.connect(self._control_busy_changed)
         self._controllers_changed()
 
     def _controllers_changed(self) -> None:
@@ -387,10 +407,10 @@ class LiveView(QWidget):
             )
         self.controller_selector.blockSignals(False)
 
-        for button in self.command_buttons:
+        for button in self.command_buttons.values():
             button.setEnabled(not self.service.is_live)
         self.command_message.setText(
-            "READ-ONLY MONITORING · Traffic Control disabled"
+            "Traffic Control menunggu status controller"
             if self.service.is_live
             else "Traffic Control ready · MOCK MODE"
         )
@@ -406,6 +426,8 @@ class LiveView(QWidget):
             self.connection_label.style().unpolish(self.connection_label)
             self.connection_label.style().polish(self.connection_label)
             self.intersection_diagram.set_signal_groups([])
+            self.revision_metric.set_value("— / — · OFFLINE")
+            self._set_revision_state("offline")
             self._stop_all_cameras(emit_status=False)
             self._clear_layout(self.camera_grid)
             self.camera_tiles.clear()
@@ -567,6 +589,7 @@ class LiveView(QWidget):
             if snapshot.mode == ControllerMode.HOLD
             else f"{snapshot.remaining_seconds:02d} s"
         )
+        self._update_revision_metric(snapshot)
 
         self.intersection_diagram.set_signal_groups(snapshot.signal_groups)
         self._update_extra_signal_text(snapshot)
@@ -578,6 +601,56 @@ class LiveView(QWidget):
         self.connection_label.setProperty("status", status)
         self.connection_label.style().unpolish(self.connection_label)
         self.connection_label.style().polish(self.connection_label)
+        self._update_control_buttons(snapshot)
+
+    def _update_revision_metric(self, snapshot: ControllerSnapshot) -> None:
+        apply_state = snapshot.apply_state.upper()
+        if not snapshot.online:
+            self.revision_metric.set_value("— / — · OFFLINE")
+            self.revision_metric.value_label.setToolTip(
+                "Controller offline. Revision tidak dapat diverifikasi."
+            )
+            self._set_revision_state("offline")
+            return
+
+        config_revision = snapshot.config_revision
+        runtime_revision = snapshot.runtime_revision
+        self.revision_metric.set_value(
+            f"{config_revision} / {runtime_revision} · {apply_state}"
+        )
+        if snapshot.safety_status != "OK" or apply_state == "FAULT":
+            state = "fault"
+            tooltip = (
+                "Safety tidak OK. Perubahan runtime dapat diblokir oleh controller."
+            )
+        elif apply_state not in {"IDLE", "UNKNOWN"}:
+            state = "applying"
+            tooltip = (
+                f"Safe Apply sedang berjalan: {apply_state}. "
+                "Runtime Revision akan menyamai Config Revision setelah selesai."
+            )
+        elif config_revision != runtime_revision:
+            state = "pending"
+            tooltip = (
+                "Configuration sudah tersimpan tetapi belum aktif pada traffic "
+                "runtime. Gunakan Apply Saved saat kondisi aman."
+            )
+        elif apply_state == "IDLE" and config_revision > 0:
+            state = "synced"
+            tooltip = "Configuration dan traffic runtime sudah sinkron."
+        else:
+            state = "unknown"
+            tooltip = "Status revision belum tersedia."
+        self.revision_metric.value_label.setToolTip(tooltip)
+        self._set_revision_state(state)
+
+    def _set_revision_state(self, state: str) -> None:
+        label = self.revision_metric.value_label
+        if label.property("revisionState") == state:
+            return
+        label.setProperty("revisionState", state)
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _update_extra_signal_text(self, snapshot: ControllerSnapshot) -> None:
         if len(snapshot.signal_groups) <= 4:
@@ -613,3 +686,151 @@ class LiveView(QWidget):
         self.command_message.setText(
             f"{command} selected · simulasi, tidak ada perintah dikirim"
         )
+
+    def _update_control_buttons(self, snapshot: ControllerSnapshot) -> None:
+        if not self.service.is_live:
+            for button in self.command_buttons.values():
+                button.setEnabled(not self._control_busy)
+            return
+        safe = snapshot.online and snapshot.safety_status == "OK"
+        idle = snapshot.apply_state == "IDLE"
+        wait = snapshot.apply_state == "WAIT"
+        any_green = any(item.aspect == "GREEN" for item in snapshot.signal_groups)
+        physical_hold = snapshot.hold_active and not snapshot.web_hold_active
+        physical_flash = snapshot.local_flashing_active
+        enabled = not self._control_busy
+        self.command_buttons["SKIP"].setEnabled(
+            enabled
+            and safe
+            and idle
+            and snapshot.mode == ControllerMode.NORMAL
+            and not snapshot.skip_pending
+            and any_green
+        )
+        self.command_buttons["HOLD"].setEnabled(
+            enabled
+            and safe
+            and not physical_hold
+            and not physical_flash
+            and (idle or (wait and snapshot.web_hold_active))
+        )
+        self.command_buttons["FLASHING"].setEnabled(
+            enabled
+            and safe
+            and not (physical_flash and not snapshot.web_flashing_active)
+            and (idle or (wait and snapshot.web_flashing_active))
+        )
+        self.command_buttons["SKIP"].setText(
+            "SKIP PENDING" if snapshot.skip_pending else "SKIP"
+        )
+        self.command_buttons["HOLD"].setText(
+            f"CANCEL HOLD {snapshot.hold_remaining_seconds}s"
+            if snapshot.web_hold_active
+            else "HOLD"
+        )
+        self.command_buttons["FLASHING"].setText(
+            "STOP FLASHING" if snapshot.web_flashing_active else "FLASHING"
+        )
+        if not snapshot.online:
+            message = "Traffic Control disabled · controller offline"
+        elif snapshot.safety_status != "OK":
+            message = f"Traffic Control disabled · SAFETY {snapshot.safety_status}"
+        elif snapshot.web_flashing_active:
+            message = "WEB FLASHING active · traffic timer paused"
+        elif snapshot.local_flashing_active:
+            message = "LOCAL FLASHING active · release from local input"
+        elif snapshot.web_hold_active:
+            message = f"WEB HOLD active · auto release {snapshot.hold_remaining_seconds}s"
+        elif snapshot.hold_active:
+            message = "LOCAL HOLD active · release from local input"
+        elif snapshot.skip_pending:
+            message = "SKIP pending · waiting Minimum Green"
+        elif not idle:
+            message = f"Traffic Control waiting · Safe Apply {snapshot.apply_state}"
+        else:
+            message = "Traffic Control ready"
+        if not self._control_busy:
+            self.command_message.setText(message)
+
+    def _control_command(self, command: str) -> None:
+        snapshot = self.service.get_controller(self.current_controller_id)
+        if not snapshot:
+            return
+        if not self.service.is_live:
+            self._mock_command(command)
+            return
+        action = command.lower()
+        active: bool | None = None
+        if command == "SKIP":
+            prompt = (
+                "Kirim perintah SKIP ke controller?\n\n"
+                "Controller tetap memeriksa Minimum Green dan dapat menunda atau menolak SKIP."
+            )
+        elif command == "HOLD":
+            active = not snapshot.web_hold_active
+            prompt = (
+                "Batalkan WEB HOLD dan lanjutkan countdown Stage?"
+                if not active
+                else "Aktifkan TIMED HOLD?\n\nStage countdown akan dibekukan sampai Hold Duration habis."
+            )
+        else:
+            active = not snapshot.web_flashing_active
+            prompt = (
+                "Hentikan WEB FLASHING dan pulihkan Current Stage?"
+                if not active
+                else "Aktifkan WEB FLASHING?\n\nActive Signal Group akan Yellow Flashing 500 ms dan traffic timer dipause."
+            )
+        answer = QMessageBox.question(
+            self,
+            f"Confirm {command}",
+            prompt,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.control_service.send(snapshot.controller_id, action, active)
+
+    def _control_busy_changed(self, busy: bool) -> None:
+        self._control_busy = busy
+        if busy:
+            self.command_message.setText("Sending Traffic Control command...")
+            for button in self.command_buttons.values():
+                button.setEnabled(False)
+        else:
+            snapshot = self.service.get_controller(self.current_controller_id)
+            if snapshot:
+                self._update_control_buttons(snapshot)
+
+    def _control_completed(
+        self,
+        controller_id: str,
+        action: str,
+        payload: object,
+    ) -> None:
+        if controller_id != self.current_controller_id or not isinstance(payload, dict):
+            return
+        message = str(payload.get("message") or f"{action.upper()} completed.")
+        self.command_message.setText(message)
+        snapshot = self.service.get_controller(controller_id)
+        if snapshot and self.event_service:
+            self.event_service.record_audit(
+                controller_id,
+                snapshot.name,
+                f"Traffic Control {action.upper()} accepted",
+                details=message,
+            )
+
+    def _control_failed(self, controller_id: str, action: str, message: str) -> None:
+        if controller_id != self.current_controller_id:
+            return
+        self.command_message.setText(f"{action.upper()} rejected · {message}")
+        QMessageBox.warning(self, "Traffic Control Rejected", message)
+        snapshot = self.service.get_controller(controller_id)
+        if snapshot and self.event_service:
+            self.event_service.record_audit(
+                controller_id,
+                snapshot.name,
+                f"Traffic Control {action.upper()} rejected",
+                details=message,
+            )

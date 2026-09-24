@@ -1,0 +1,201 @@
+TRAFFIC COMMAND CENTER V0.5.03 - TRANSACTIONAL TRAFFIC CONFIGURATION TEST
+======================================================================
+
+A. CHECKPOINT
+1. Basis stable: commit 8ac84f8, tag v0.5.02.
+2. Firmware controller: V1.23.1 yang sudah hardware tested.
+3. V0.5.03 masih test build; jangan membuat tag stable sebelum seluruh uji selesai.
+4. Buat backup konfigurasi controller sebelum menguji Save atau Safe Apply.
+
+B. STARTUP DAN REGRESSION
+1. Aktifkan virtual environment.
+2. Jalankan: python main.py
+3. Top bar dan status bar harus menampilkan V0.5.03.
+4. Overview, Live View, Controllers, Camera Configuration, dan Alarms & Events harus tetap normal.
+5. RTSP camera tidak boleh berubah ukuran hanya karena membuka Traffic Configuration.
+6. SKIP, HOLD, dan FLASHING tersedia dalam LIVE API sesuai status keselamatan.
+7. Pada Traffic Configuration, tombol disabled harus berwarna abu-abu redup.
+8. Tombol aktif harus memakai background terang: biru untuk action/edit,
+   hijau untuk Validate/Save/Apply, dan merah untuk Cancel/Clear.
+9. Tombol disabled tidak boleh berubah terang saat mouse diarahkan ke tombol.
+10. Aturan abu-abu harus berlaku pada seluruh halaman, termasuk Traffic
+    Configuration, Live View Traffic Control, dan Backup & Restore.
+11. Tombol baru boleh berubah biru/hijau/merah setelah statusnya benar-benar aktif.
+
+C. LIVE API DAN PEMBACAAN AWAL
+1. Buka CONTROLLERS lalu pilih LIVE API · ESP32-S3.
+2. Hubungkan controller V1.23.1 dan pastikan ONLINE.
+3. Buka TRAFFIC CONFIGURATION.
+4. Source harus CONFIG RAM jika tidak ada Draft aktif.
+5. Cocokkan Active SG, jumlah Plan/Schedule/Holiday, Config/Runtime Revision,
+   Apply State, Safety, dan nama seluruh SG dengan dashboard controller.
+
+D. LEBAR KOLOM SIGNAL GROUP
+1. Buka PLANS & STAGES dan pilih Plan yang memiliki Stage.
+2. Pastikan semua kolom SG1 sampai SG12 mempunyai lebar yang sama.
+3. Khusus SG4 tidak boleh lebih lebar daripada SG1, SG2, atau SG3.
+4. Gunakan horizontal scroll dan pastikan kolom tidak berubah lebar saat data diperbarui.
+
+E. MEMBUKA DRAFT COMMAND CENTER
+1. Tekan EDIT CONFIGURATION.
+2. Banner harus menjadi SOURCE: DRAFT · COMMAND CENTER SESSION.
+3. Controller selector harus terkunci selama Draft masih terbuka.
+4. Tombol edit Stage, Schedule, dan Holiday harus aktif sesuai pilihan tabel.
+5. Tombol SAVE masih disabled sebelum perubahan dibuat dan divalidasi.
+6. Tanpa menekan REFRESH, CANCEL DRAFT, UPDATE STAGE COUNT, dan CLEAR PLAN
+   harus langsung aktif sesuai Plan terpilih setelah EDIT CONFIGURATION berhasil.
+7. Ulangi proses membuka/cancel Draft beberapa kali untuk memastikan status tombol stabil.
+
+F. PLAN DAN STAGE - CANCEL ROLLBACK
+1. Catat isi salah satu Plan yang aman untuk pengujian.
+2. Ubah Stage Count.
+3. Edit duration dan state beberapa SG pada salah satu Stage.
+4. Pastikan indikator Validation kembali NOT CHECKED setelah mutasi.
+5. Periksa ringkasan Draft changes dan Event & Alarm audit.
+6. Tekan CANCEL DRAFT dan konfirmasi.
+7. Baca ulang Plan; seluruh perubahan harus hilang dan Config Revision tidak berubah.
+
+G. PLAN DAN STAGE - SAVE
+1. Buka Draft baru.
+2. Tambah atau ubah Plan, Stage Count, duration, dan state SG.
+3. Uji CLEAR PLAN hanya pada Plan yang memang disiapkan untuk pengujian.
+4. Pastikan seluruh 12 state SG tetap dikirim; SG inactive tidak boleh rusak.
+5. Jangan Save sampai Schedule yang merujuk Plan tersebut juga sudah valid.
+
+H. SCHEDULE
+1. Uji Sunday sampai Saturday dan Holiday.
+2. Pilih slot kosong lalu SET SLOT; pilih waktu dan Plan yang sudah defined.
+3. Edit kembali slot yang sama dan pastikan nilai awal terbaca benar.
+4. CLEAR SLOT lalu pastikan slot menjadi EMPTY.
+5. Pastikan perubahan Schedule berada dalam Draft yang sama dengan Plan/Stage.
+
+I. HOLIDAY
+1. Pilih slot kosong lalu SET DATE.
+2. Pilih tanggal valid tahun 2000-2099.
+3. Edit kembali tanggal tersebut dan pastikan nilai awal benar.
+4. CLEAR DATE lalu pastikan slot menjadi EMPTY.
+5. Pastikan perubahan Holiday berada dalam Draft yang sama.
+
+J. VALIDASI GAGAL
+1. Buat Draft tidak valid secara terkontrol, misalnya hapus Plan yang masih dirujuk Schedule.
+2. Tekan VALIDATE.
+3. Firmware harus menolak dan menampilkan pesan/kode kesalahan.
+4. SAVE TO NVS dan SAVE & SAFE APPLY harus tetap disabled.
+5. Perbaiki Draft lalu VALIDATE ulang sampai status VALID.
+
+K. SAVE TO NVS TANPA APPLY
+1. Dengan Draft valid, catat Config Revision dan Runtime Revision.
+2. Tekan SAVE TO NVS dan periksa dialog konfirmasi serta ringkasan perubahan.
+3. Setelah berhasil, Draft harus tertutup dan Config Revision meningkat.
+4. Runtime Revision harus tetap lama sehingga konfigurasi belum mengendalikan lampu.
+5. APPLY SAVED harus aktif jika Apply State IDLE dan Safety OK.
+6. Restart controller bila perlu dan pastikan konfigurasi tetap tersimpan di NVS.
+
+L. APPLY SAVED
+1. Pastikan terdapat Config Revision yang lebih baru daripada Runtime Revision.
+2. Tekan APPLY SAVED.
+3. Controller harus melakukan Safe Apply sesuai firmware.
+4. Setelah selesai, Config Revision dan Runtime Revision harus sama.
+5. Tidak boleh ada perubahan output mendadak di luar prosedur Safe Apply.
+
+M. SAVE & SAFE APPLY
+1. Buka Draft, lakukan perubahan kecil, lalu VALIDATE sampai VALID.
+2. Tekan SAVE & SAFE APPLY dan periksa dialog konfirmasi.
+3. Konfigurasi harus tersimpan ke NVS dan permintaan Safe Apply diterima.
+4. Pantau Apply State sampai IDLE dan pastikan revision akhirnya sama.
+5. Jika Safety bukan OK atau Apply sedang busy, tombol harus disabled/ditolak aman.
+
+N. DRAFT EKSTERNAL
+1. Buka Draft dari dashboard web controller, bukan dari Command Center.
+2. Refresh Traffic Configuration.
+3. Banner harus menjadi SOURCE: DRAFT · EXTERNAL SESSION.
+4. Data Draft boleh dibaca, tetapi seluruh tombol mutasi, Validate, Save, dan Cancel
+   harus disabled.
+5. Command Center tidak boleh mengambil alih atau membatalkan Draft eksternal.
+6. Batalkan Draft dari dashboard lalu Refresh; Source harus kembali CONFIG RAM.
+
+O. SATU SESI DAN PENUTUPAN APLIKASI
+1. Buka Draft Command Center pada controller A.
+2. Controller selector harus terkunci; controller B tidak dapat dipilih dari halaman ini.
+3. Pindah ke halaman lain lalu kembali; Draft A harus tetap dikenali sebagai sesi sendiri.
+4. Tutup aplikasi ketika Draft masih terbuka.
+5. Dialog peringatan harus muncul. Pilih No dan aplikasi harus tetap terbuka.
+6. Pilih Yes hanya untuk menguji; Draft tetap berada pada controller dan harus
+   diselesaikan melalui dashboard jika aplikasi sudah ditutup.
+
+P. GANGGUAN KOMUNIKASI
+1. Buka Draft dan lakukan satu perubahan tanpa Save.
+2. Putus kabel LAN controller.
+3. Tombol mutasi/Save harus disabled dan aplikasi tidak boleh crash.
+4. Alarm komunikasi V0.5.01 harus tetap muncul.
+5. Sambungkan LAN kembali dan Refresh.
+6. Jika Draft masih aktif pada firmware, verifikasi Source dan ownership secara hati-hati.
+7. Jangan Save bila status sesi meragukan; selesaikan Draft melalui dashboard controller.
+
+Q. AUDIT DAN REGRESSION AKHIR
+1. Event & Alarm harus mencatat start Draft, setiap jenis perubahan, validate, cancel,
+   Save, dan Apply request.
+2. Export CSV harus tetap berfungsi.
+3. Overview/Live View/Camera harus tetap normal sesudah transaksi konfigurasi.
+4. Controller harus tetap beroperasi mandiri ketika Command Center ditutup.
+5. Setelah seluruh pengujian berhasil, baru buat commit/tag stable V0.5.03.
+
+R. OVERVIEW DAN FLASHING SIGNAL GROUP
+1. Amati kolom kanan berisi ONLINE, Camera, API xxx ms, dan OPEN.
+2. Lebar kolom harus tetap ketika nilai API berubah dari satu hingga empat digit.
+3. Jalankan Stage yang memakai FLASH YELLOW 500; lampu kuning di Overview dan
+   Live Intersection Diagram harus berkedip dengan interval 500 ms.
+4. Ulangi dengan FLASH YELLOW 1000; interval harus berubah menjadi 1000 ms.
+5. SG RED, YELLOW, GREEN, dan OFF harus tetap statis.
+
+S. LIVE TRAFFIC CONTROL
+1. Pastikan controller ONLINE, Safety OK, Safe Apply IDLE, dan Mode NORMAL.
+2. Tekan SKIP dan jawab Yes. Firmware harus mengeksekusi atau menampilkan SKIP
+   PENDING sampai Minimum Green terpenuhi.
+3. Tekan HOLD dan jawab Yes. Countdown Stage harus berhenti dan tombol berubah
+   menjadi CANCEL HOLD beserta sisa waktu.
+4. Batalkan WEB HOLD; countdown harus melanjutkan remaining time tanpa restart.
+5. Aktifkan FLASHING; Active SG harus Yellow Flashing 500 ms dan timer dipause.
+6. Tekan STOP FLASHING; Current Stage harus pulih dan timer melanjutkan.
+7. Saat Safety fault/override, controller offline, atau kondisi Safe Apply tidak
+   mengizinkan, tombol terkait harus disabled atau penolakan firmware ditampilkan.
+8. Seluruh hasil diterima/ditolak harus tercatat sebagai AUDIT event.
+
+S2. LIVE VIEW REVISION DAN HEADER
+1. Pada ringkasan Live View harus tersedia Config / Runtime Rev beserta Apply State.
+2. Saat revision sama dan Apply IDLE, nilai berwarna hijau.
+3. Setelah SAVE TO NVS tanpa Apply, Config/Runtime berbeda dan berwarna kuning.
+4. Saat Safe Apply berjalan, state WAIT/transisi harus berwarna biru.
+5. Setelah selesai, revision harus sama kembali dan berwarna hijau.
+6. Saat Safety/Apply FAULT nilai harus merah; saat offline harus abu-abu.
+7. Tanggal dan jam pada header harus berukuran sama dengan judul TRAFFIC COMMAND CENTER.
+8. Operator Pusat tetap berada di bawah tanggal/jam dan blok waktu tidak bergeser
+   setiap detik.
+9. Status ONLINE/LIVE dan tombol ALARM harus berada lebih ke kiri dengan jarak
+   yang jelas dari blok tanggal/jam.
+
+T. BACKUP KE PC
+1. Pastikan tidak ada Draft atau perubahan RAM/NVS yang belum diselesaikan.
+2. Buka BACKUP & RESTORE dan pilih controller ONLINE.
+3. Tekan DOWNLOAD BACKUP TO PC lalu pilih nama/lokasi file.
+4. Pastikan file JSON benar-benar tersimpan dan dapat dipilih kembali.
+5. Bila controller menolak karena Draft/dirty config, pesan firmware harus tampil.
+6. Saat download berlangsung, status harus menampilkan jumlah KB yang diterima.
+7. Setelah selesai, status berubah menjadi BACKUP SAVED dan tombol aktif kembali.
+8. Jika respons tidak selesai dalam 20 detik, aplikasi harus membatalkan request,
+   menampilkan timeout, dan tombol DOWNLOAD BACKUP TO PC aktif kembali.
+
+U. VALIDATE DAN RESTORE
+1. Pilih file backup JSON lalu tekan VALIDATE FILE.
+2. Cocokkan Source Controller, firmware, Plans/Schedules/Holidays, Active SG,
+   conflict count, dan checksum dengan file/controller asal.
+3. Setelah validasi, pemilih controller dan file harus terkunci sampai Restore
+   atau CANCEL VALIDATED FILE dilakukan.
+4. Uji CANCEL VALIDATED FILE; tidak boleh ada konfigurasi yang berubah.
+5. Validasi ulang lalu pilih Traffic & Operational Settings. Konfirmasi Restore
+   dan periksa Plan, Stage, Schedule, Holiday, serta setting operasional.
+6. Network Setup dan identitas controller tujuan harus tetap.
+7. Jika aman untuk pengujian, uji Full Restore; identitas/configuration ikut berubah,
+   tetapi Network Setup tetap.
+8. Restore harus disabled bila Safety bukan OK atau Safe Apply bukan IDLE.
+9. Pantau Safe Apply sampai selesai dan pastikan operasi lampu tetap aman.

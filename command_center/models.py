@@ -65,6 +65,16 @@ class ControllerSnapshot:
     last_update_at: str = ""
     response_time_ms: int | None = None
     consecutive_failures: int = 0
+    config_revision: int = 1
+    runtime_revision: int = 1
+    apply_state: str = "UNKNOWN"
+    web_hold_active: bool = False
+    hold_active: bool = False
+    hold_remaining_seconds: int = 0
+    skip_pending: bool = False
+    web_flashing_active: bool = False
+    local_flashing_active: bool = False
+    flashing_active: bool = False
     active_signal_groups: int = 4
     signal_groups: list[SignalGroupState] = field(default_factory=list)
     cameras: list[CameraConfiguration] = field(default_factory=list)

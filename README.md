@@ -1,8 +1,8 @@
-# Traffic Command Center — PySide6 V0.5.02
+# Traffic Command Center — PySide6 V0.5.03
 
-Command Center read-only untuk Traffic Light Controller ESP32-S3 V1.23.1 dengan monitoring RTSP camera.
+Command Center untuk monitoring Traffic Light Controller ESP32-S3 V1.23.1, konfigurasi traffic transaksional, Event & Alarm, dan monitoring kamera RTSP.
 
-V0.5.02 menambahkan tampilan **Traffic Configuration read-only** untuk membaca Plan, Stage, Schedule, Hari Libur, nama SG, revision, Apply State, dan Safety langsung dari firmware V1.23.1. Event & Alarm V0.5.01 serta perbaikan RTSP/layout kamera V0.4 FIX2 tetap dipertahankan. Traffic Control dan perubahan konfigurasi traffic masih dinonaktifkan.
+V0.5.03 mengembangkan halaman **Traffic Configuration** menjadi editor terpadu untuk Plan, Stage, Schedule, dan Holiday. Seluruh perubahan berada dalam satu Draft controller, divalidasi firmware, kemudian dapat disimpan ke NVS atau disimpan sekaligus diminta melalui Safe Apply. Versi ini juga mengaktifkan Traffic Control serta Backup & Restore melalui API firmware V1.23.1.
 
 ## Fitur utama
 
@@ -11,37 +11,36 @@ V0.5.02 menambahkan tampilan **Traffic Configuration read-only** untuk membaca P
 - Overview dan diagram persimpangan mengikuti data ESP32-S3 aktual.
 - Jumlah kamera otomatis mengikuti `SG aktif + 1 PTZ`.
 - Kamera controller terpilih saja yang aktif.
-- Grid Live View memakai substream.
-- Double-click kamera membuka main stream secara fullscreen.
+- Grid Live View memakai substream; double-click membuka main stream fullscreen.
 - Retry stream otomatis setiap lima detik.
 - Hikvision Standard dan Custom RTSP.
-- Konfigurasi kamera disimpan lokal.
 - Password kamera disimpan melalui Windows Credential Manager menggunakan `keyring`.
-- Traffic Control tetap dinonaktifkan dalam LIVE API.
-- Rasio panel Live Camera dan Live Intersection Diagram tetap 7:4 ketika status stream berubah.
-- Alarm komunikasi controller, mode HOLD/FLASHING/SAFETY, status safety, dan camera offline.
+- Alarm komunikasi, HOLD/FLASHING/SAFETY, status safety, dan camera offline.
 - Alarm aktif ditutup otomatis saat kondisi pulih dan pemulihan dicatat sebagai event baru.
-- Acknowledge satu/beberapa alarm atau seluruh alarm aktif.
-- Filter event berdasarkan controller, severity, status, dan kata pencarian.
-- Export event yang sedang difilter ke file CSV.
-- Indikator jumlah alarm aktif dan alarm baru pada top bar.
-- Response time API, jumlah kegagalan berurutan, dan last successful update.
-- Auto-reconnect bertahap 1, 2, 5, 10, lalu maksimum 15 detik ketika controller offline.
-- Audit perubahan Controller Connection serta waktu aplikasi start/close.
-- Traffic Configuration read-only untuk maksimal lima controller.
-- Ringkasan Active SG, jumlah Plan/Schedule/Holiday, Config/Runtime Revision, Apply State, dan Safety.
-- Daftar 24 Plan dan seluruh Stage/SG pada Plan yang dipilih.
-- Daftar 24 slot Schedule untuk Sunday–Saturday dan Holiday.
-- Daftar seluruh 32 slot Hari Libur.
-- Peringatan jelas jika data berasal dari Draft Config Editor yang belum di-Commit.
-- Request konfigurasi dilakukan secara lazy dan satu per satu hanya ketika halaman dibuka.
+- Acknowledge alarm, filter event, dan export CSV.
+- Auto-reconnect bertahap saat controller offline.
+- Traffic Configuration untuk Plan 1–24 dan Stage 1–24 per Plan.
+- Editor state 12 Signal Group dengan nama SG dan penanda SG aktif.
+- Seluruh 8 kelompok Schedule dan 24 slot per kelompok.
+- Seluruh 32 slot Holiday.
+- Lebar kolom SG seragam dan horizontal scroll untuk seluruh 12 SG.
+- Satu sesi Draft Command Center pada satu controller dalam satu waktu.
+- Draft yang dibuka dari dashboard atau client lain hanya dapat dilihat; Command Center tidak mengambil alih atau membatalkannya.
+- Firmware menjadi validator final sebelum Save atau Safe Apply.
+- Pilihan `SAVE TO NVS`, `SAVE & SAFE APPLY`, dan `APPLY SAVED`.
+- Audit untuk pembukaan Draft, perubahan, validasi, Save, Apply, dan Cancel.
+- Traffic Control `SKIP`, timed `HOLD`, dan `FLASHING` dengan konfirmasi operator serta guard Safety/Safe Apply.
+- Backup configuration ke file JSON di PC.
+- Validasi file sebelum Restore, preview source/checksum, serta pilihan Full Restore atau Traffic & Operational Settings.
+- Tampilan `FLASH YELLOW 500/1000` berkedip pada Overview dan Live Intersection Diagram.
+- Lebar kolom status API/OPEN pada Overview tetap ketika response time berubah.
+- Live View menampilkan Config Revision, Runtime Revision, dan Apply State tanpa request API tambahan.
+- Header menampilkan tanggal/jam berukuran besar dengan blok Operator Pusat yang stabil.
 
 ## Persyaratan Windows
 
 1. Python 64-bit direkomendasikan.
-2. Install VLC Media Player dengan arsitektur yang sama dengan Python:
-   - Python 64-bit → VLC 64-bit.
-   - Python 32-bit → VLC 32-bit.
+2. Install VLC Media Player dengan arsitektur yang sama dengan Python.
 3. Pastikan VLC dapat membuka RTSP kamera secara manual.
 
 ## Instalasi
@@ -66,8 +65,6 @@ RETRY · ERROR
 RETRY · TIMEOUT 12s
 ```
 
-Jika `LIVE` tampil tetapi gambar tetap hitam, periksa codec kamera dan samakan VLC/Python 32/64-bit. Jika `TIMEOUT` atau `ERROR`, periksa URL, user/password, port 554, dan izin RTSP kamera.
-
 ## Alarms & Events
 
 Database dibuat otomatis pada saat aplikasi dijalankan:
@@ -76,21 +73,12 @@ Database dibuat otomatis pada saat aplikasi dijalankan:
 command_center_data/events.db
 ```
 
-Event yang lebih lama dari 90 hari dibersihkan otomatis jika sudah tidak aktif. Alarm aktif tidak dihapus oleh proses retention.
-
-Severity:
-
-- `CRITICAL`: controller offline, mode SAFETY, green conflict, fault, atau konfigurasi tidak valid.
-- `WARNING`: mode HOLD/FLASHING, camera offline, atau status safety non-kritis.
-- `INFO`: kondisi pulih atau kembali normal.
-- `AUDIT`: aplikasi start/close dan perubahan pengaturan koneksi controller.
-
-`Acknowledge` hanya menandai bahwa alarm sudah diketahui operator. Acknowledge tidak menyelesaikan alarm dan tidak mengubah operasi ESP32-S3.
+Event yang lebih lama dari 90 hari dibersihkan otomatis jika sudah tidak aktif. Alarm aktif tidak dihapus oleh proses retention. `Acknowledge` hanya menandai bahwa alarm sudah diketahui operator; tidak menyelesaikan alarm dan tidak mengubah operasi ESP32-S3.
 
 ## Menghubungkan controller
 
 1. Buka **CONTROLLERS**.
-2. Pilih `LIVE API · ESP32-S3 read-only`.
+2. Pilih `LIVE API · ESP32-S3`.
 3. Aktifkan slot controller.
 4. Masukkan IP atau Base URL ESP32-S3.
 5. Tekan **SAVE & CONNECT**.
@@ -99,17 +87,9 @@ Severity:
 
 1. Buka **CAMERA CONFIGURATION**.
 2. Pilih controller dan kamera.
-3. Isi:
-   - Camera profile
-   - Enable camera
-   - Camera IP/hostname
-   - RTSP port
-   - Username dan password
-   - Main stream path
-   - Substream path
-4. Tekan **TEST CONNECTION** untuk membuka substream.
-5. Tekan **PREVIEW** untuk memeriksa main stream fullscreen.
-6. Tekan **SAVE CAMERA**.
+3. Isi profile, status enable, alamat, port, username/password, serta path stream.
+4. Tekan **TEST CONNECTION** untuk substream dan **PREVIEW** untuk main stream.
+5. Tekan **SAVE CAMERA**.
 
 Preset Hikvision:
 
@@ -119,49 +99,81 @@ Substream   : /Streaming/Channels/102
 RTSP port   : 554
 ```
 
-Untuk kamera SG berikutnya, nomor channel dapat disesuaikan dengan konfigurasi kamera di lapangan. Pada kamera IP Hikvision yang berdiri sendiri, channel umumnya tetap 101/102 pada setiap alamat IP kamera.
+## Traffic Configuration
 
-Kolom Camera IP/hostname dapat berisi IP saja atau URL RTSP lengkap. Jika URL lengkap sudah memiliki path, aplikasi tidak menambahkan path untuk kedua kalinya.
-
-## Membaca Traffic Configuration
-
-1. Hubungkan controller dalam mode `LIVE API`.
+1. Hubungkan controller dalam mode `LIVE API` dan pastikan status ONLINE.
 2. Buka **TRAFFIC CONFIGURATION**.
-3. Pilih controller lalu tekan **REFRESH CONFIGURATION** jika ingin membaca ulang.
-4. Gunakan tab:
-   - **OVERVIEW** untuk status konfigurasi dan nama 12 SG.
-   - **PLANS & STAGES** untuk memilih Plan dan melihat Stage serta state setiap SG.
-   - **SCHEDULE** untuk memilih kelompok hari dan membaca 24 slot jadwal.
-   - **HOLIDAYS** untuk membaca seluruh 32 slot tanggal hari libur.
+3. Tekan **EDIT CONFIGURATION** untuk membuka satu Draft pada controller.
+4. Edit Plan/Stage, Schedule, dan Holiday sesuai kebutuhan.
+5. Tekan **VALIDATE**. Save hanya aktif setelah firmware menyatakan Draft valid.
+6. Pilih salah satu:
+   - **SAVE TO NVS**: menyimpan konfigurasi tetapi tidak mengubah traffic runtime.
+   - **SAVE & SAFE APPLY**: menyimpan lalu meminta pergantian runtime melalui Safe Apply.
+   - **CANCEL DRAFT**: membuang seluruh perubahan Draft.
+7. Jika konfigurasi sudah tersimpan tetapi belum aktif, gunakan **APPLY SAVED**.
 
-Command Center membaca endpoint berikut secara berurutan:
+Semua bagian merupakan satu transaksi. Cancel membuang perubahan Plan, Stage, Schedule, dan Holiday dalam Draft yang sama. Tombol pemilih controller dikunci selama Draft milik Command Center masih terbuka.
+
+Jika controller sudah memiliki Draft dari dashboard/client lain, halaman menampilkan `SOURCE: DRAFT · EXTERNAL SESSION`. Data tetap dapat diperiksa, tetapi semua tombol perubahan dan Cancel dinonaktifkan.
+
+Endpoint baca dan transaksi utama:
 
 ```text
-GET /api/editor/status
-GET /api/editor/system
-GET /api/editor/plans
-GET /api/editor/plan?plan=N
-GET /api/editor/schedule?day=N
-GET /api/editor/holidays
+GET  /api/editor/status
+GET  /api/editor/system
+GET  /api/editor/plans
+GET  /api/editor/plan?plan=N
+GET  /api/editor/schedule?day=N
+GET  /api/editor/holidays
+POST /api/editor/start
+POST /api/editor/validate
+POST /api/editor/cancel
+POST /api/operator/save
+POST /api/operator/save-apply
+POST /api/runtime/apply
 ```
 
-Jika Config Editor pada dashboard controller sedang terbuka, firmware mengembalikan sumber `DRAFT`. Command Center menampilkan banner kuning karena data tersebut mungkin belum di-Commit, disimpan, atau diterapkan. Command Center tidak membuka maupun mengubah Draft tersebut.
+Mutasi Draft menggunakan endpoint firmware untuk stage count, stage, schedule, holiday, serta operasi clear. Command Center tidak menulis NVS secara langsung.
 
-## Penyimpanan
+## Traffic Control
+
+Pada **LIVE VIEW**, tombol SKIP, HOLD, dan FLASHING menggunakan endpoint firmware berikut:
+
+```text
+POST /api/control/skip
+POST /api/control/hold?active=0|1
+POST /api/control/flashing?active=0|1
+```
+
+Tombol hanya aktif sesuai status controller. Firmware tetap menjadi pengaman dan validator final untuk Minimum Green, Safety Override/Fault, input lokal, serta Safe Apply.
+
+## Backup & Restore
+
+Halaman **BACKUP & RESTORE** dapat menyimpan backup sebagai file JSON di PC. Sebelum Restore, file harus divalidasi oleh controller dan operator dapat memeriksa Source Controller, firmware, jumlah data, Active SG, conflict count, serta checksum.
+
+- **Traffic & Operational Settings**: Plan, Stage, Schedule, Holiday, dan setting operasional.
+- **Full Restore**: seluruh konfigurasi dan identitas controller.
+- Network Setup tetap dipertahankan pada kedua mode.
+- Restore hanya diaktifkan ketika controller ONLINE, Safety `OK`, dan Safe Apply `IDLE`.
+
+## Penyimpanan lokal
 
 ```text
 command_center_data/controllers.json
 command_center_data/cameras.json
+command_center_data/events.db
 ```
 
 File `cameras.json` tidak menyimpan password. Password disimpan melalui Credential Manager pada sistem operasi.
 
 ## Batas keamanan
 
-- ESP32-S3 hanya menerima request GET untuk status dan pembacaan konfigurasi dari Command Center.
-- Pembacaan konfigurasi dimulai hanya ketika halaman Traffic Configuration dibuka, dijalankan satu per satu, dan dihentikan saat halaman ditinggalkan.
-- Tidak ada request POST ke Config Editor dan tidak ada Editor Start, Update, Commit, Save, atau Safe Apply.
-- Tidak ada perintah SKIP, HOLD, FLASHING, Safe Apply, atau perubahan konfigurasi traffic.
-- Stream kamera dihentikan ketika operator meninggalkan halaman Live View.
+- Perubahan konfigurasi hanya tersedia pada `LIVE API`, controller ONLINE, dan Draft milik sesi Command Center.
+- Firmware V1.23.1 tetap menjadi sumber data dan validator final.
+- Save/Apply tidak tersedia sebelum Draft dimodifikasi dan lulus validasi firmware.
+- Safe Apply hanya diminta ketika Safety `OK` dan proses Apply tidak sedang sibuk.
+- Draft eksternal tidak diambil alih atau dibatalkan oleh Command Center.
+- Jika aplikasi ditutup ketika memiliki Draft, operator mendapat peringatan; Draft tetap berada pada controller jika penutupan diteruskan.
+- SKIP, HOLD, dan FLASHING mengikuti guard UI dan validasi final firmware.
+- Restore selalu membutuhkan validasi file serta konfirmasi operator.
 - Controller tetap bekerja mandiri jika Command Center atau kamera terputus.
-- Database Event & Alarm hanya berada di PC Command Center dan tidak membebani ESP32-S3.

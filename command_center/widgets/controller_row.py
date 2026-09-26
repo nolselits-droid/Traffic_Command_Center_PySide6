@@ -175,9 +175,7 @@ class ControllerRow(QFrame):
         self.camera_label.setText(
             f"Camera {snapshot.camera_online_count}/{snapshot.camera_enabled_count} online"
         )
-        if snapshot.last_update_at == "MOCK":
-            self.health_label.setText("MOCK DATA")
-        elif snapshot.response_time_ms is not None:
+        if snapshot.response_time_ms is not None:
             self.health_label.setText(
                 f"API {snapshot.response_time_ms} ms · errors "
                 f"{snapshot.consecutive_failures}"

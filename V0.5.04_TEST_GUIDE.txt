@@ -1,0 +1,130 @@
+TRAFFIC COMMAND CENTER V0.5.04 FIX2 - SYSTEM SETTINGS & UI TEST GUIDE
+================================================================
+
+STATUS
+------
+V0.5.04 FIX2 adalah test build. Jangan membuat tag stable sebelum seluruh uji
+berikut berhasil pada firmware Traffic Light Controller V1.23.1.
+
+PERSIAPAN
+----------
+1. Jalankan controller dalam mode normal dan pastikan Safety = OK.
+2. Command Center menggunakan LIVE API dan controller terlihat ONLINE.
+3. Pastikan Traffic Configuration tidak memiliki Draft atau RAM changes.
+4. Simpan backup controller sebelum menguji perubahan System Settings.
+
+A. UI DASAR
+-----------
+1. SYSTEM SETTINGS harus berada sebelum USERS pada sidebar.
+2. Header harus menampilkan jam dahulu, lalu tanggal:
+   HH:mm:ss  DD/MM/YYYY
+3. Buka SYSTEM SETTINGS dan pilih controller.
+4. Empat tab harus tampil:
+   - IDENTITY & OPERATIONAL
+   - STARTUP PATTERN
+   - SIGNAL GROUP NAMES
+   - RTC & NETWORK
+5. Tombol tanpa perubahan harus abu-abu/nonaktif.
+6. Setelah nilai valid diubah, tombol terkait menjadi terang/aktif.
+
+B. GUARD KESELAMATAN
+--------------------
+1. Saat controller OFFLINE, semua tombol tulis harus nonaktif.
+2. Saat Safe Apply tidak IDLE, semua tombol tulis harus nonaktif.
+3. Saat Traffic Configuration Draft terbuka, semua tombol tulis harus nonaktif.
+4. Saat Traffic RAM MODIFIED, semua tombol tulis harus nonaktif.
+5. Saat Safety bukan OK, semua tombol tulis harus nonaktif.
+6. REFRESH dan status guard harus menjelaskan alasan pemblokiran.
+
+B2. LIVE VIEW STATUS & ONE-CLICK CONTROL
+----------------------------------------
+1. Nilai Mode, Safety, Current Plan, Current Stage, Scheduled Plan,
+   Remaining Time, dan Config/Runtime Rev harus memakai font lebih besar.
+2. NORMAL dan Safety OK harus hijau/turquoise, bukan putih atau orange.
+3. Plan/Stage/Remaining normal harus biru muda.
+4. Config/Runtime sinkron harus hijau; pending orange; fault merah.
+5. Tekan SKIP. Tidak boleh muncul dialog konfirmasi.
+6. Saat request berjalan, ketiga tombol harus nonaktif dan notifikasi
+   SENDING SKIP REQUEST harus tampil di bawah tombol.
+7. Uji HOLD/RELEASE HOLD dan FLASHING/STOP FLASHING dengan cara yang sama.
+8. Accepted/rejected harus tampil non-modal; tidak boleh muncul QMessageBox.
+9. Guard controller untuk Safety, Safe Apply, Minimum Green, dan local input
+   tetap harus bekerja.
+
+B3. GLOBAL COLLAPSIBLE SIDEBAR
+-----------------------------
+1. Tekan tombol menu pada header; sidebar OVERVIEW-USERS harus tersembunyi.
+2. Area halaman, terutama kamera Live View, harus melebar memakai ruang sidebar.
+3. Tekan tombol menu lagi; sidebar harus kembali tanpa mengganti halaman aktif.
+4. Uji shortcut Ctrl+B pada beberapa halaman.
+5. Sembunyikan sidebar, tutup aplikasi, lalu buka kembali. Kondisi terakhir
+   harus dipulihkan.
+6. Pada instalasi/setting baru, kondisi default sidebar harus OPEN.
+7. Khusus Live View, catat lebar panel Live Intersection Diagram, lalu hide
+   sidebar. Lebar panel tersebut harus tetap; hanya Live Camera yang melebar.
+8. Buka kembali sidebar. Live Camera harus menyempit dan panel Intersection
+   Diagram tetap pada lebar yang sama.
+9. Pindah ke halaman lain; halaman selain Live View tetap boleh menggunakan
+   seluruh ruang tambahan ketika sidebar disembunyikan.
+
+C. IDENTITY & OPERATIONAL
+-------------------------
+1. Ubah Controller Name dan salah satu timing.
+2. Tekan SAVE IDENTITY & OPERATIONAL.
+3. Dialog harus menampilkan nilai lama dan nilai baru.
+4. Setelah konfirmasi, pesan sukses dari controller harus tampil.
+5. Tekan REFRESH dan pastikan nilai baru tetap ada.
+6. Verifikasi dashboard/controller status memakai nama baru.
+7. Uji batas:
+   - Controller ID: 1-9999
+   - Safe Apply All Red: 1-10 detik
+   - Hold Duration: 5-900 detik
+   - Minimum Green Before Skip: 5-120 detik
+
+D. STARTUP PATTERN
+------------------
+1. Ubah Yellow Flashing dan Startup All Red.
+2. Tekan SAVE STARTUP PATTERN dan konfirmasi.
+3. Tekan REFRESH; nilai harus tetap tersimpan.
+4. Restart controller pada kondisi pengujian aman.
+5. Verifikasi urutan Yellow Flashing 500 ms lalu All Red sesuai durasi.
+6. Uji nilai 0 untuk memastikan phase terkait dilewati.
+
+E. SIGNAL GROUP NAMES
+---------------------
+1. Ubah satu nama SG dan tekan SAVE SG NAMES.
+2. Pastikan nama baru tampil setelah REFRESH.
+3. Pastikan Overview, Live View, dan Traffic Configuration ikut memakai nama baru.
+4. Ubah beberapa SG sekaligus dan simpan kembali.
+5. Pastikan field menerima maksimum 40 karakter.
+6. Putuskan LAN saat proses multi-SG hanya pada bench test; pastikan UI kembali
+   aktif, menampilkan error, dan menyarankan REFRESH/retry.
+
+F. RTC
+-----
+1. Bandingkan Controller RTC dan Command Center PC.
+2. Tekan SYNC FROM PC dan konfirmasi.
+3. Selisih setelah refresh seharusnya mendekati 0 detik.
+4. Uji SET MANUAL RTC dengan tanggal/jam yang valid.
+5. Pastikan Schedule dievaluasi ulang oleh firmware.
+6. Untuk selisih >=60 detik, pastikan dialog memberi peringatan dampak Schedule.
+
+G. NETWORK READ-ONLY
+--------------------
+1. Verifikasi Selected Interface, DHCP/STATIC, Current IP, Subnet, Gateway,
+   dan DNS sesuai controller.
+2. Pastikan tidak ada field atau tombol untuk mengubah network.
+3. Konfigurasi network tetap hanya melalui GPIO38 Network Setup Mode.
+
+H. EVENT & REGRESI
+------------------
+1. Perubahan berhasil harus masuk Alarms & Events sebagai AUDIT.
+2. Kegagalan request juga harus dicatat sebagai AUDIT.
+3. Pastikan Overview, Live View, Traffic Configuration, Traffic Control,
+   Backup & Restore, kamera, dan Event Alarm V0.5.03 tetap berjalan.
+4. Tutup dan buka kembali aplikasi; nilai controller harus tetap berasal dari NVS.
+
+GIT STABLE
+----------
+Setelah seluruh pengujian berhasil, merge branch V0.5.04 ke develop lalu buat
+annotated tag v0.5.04. Jangan membuat tag stable hanya berdasarkan compile.

@@ -158,7 +158,7 @@ class BackupRestoreView(QWidget):
 
     def _update_controls(self) -> None:
         snapshot = self.controller_service.get_controller(self.current_controller_id)
-        online = bool(self.controller_service.is_live and snapshot and snapshot.online)
+        online = bool(snapshot and snapshot.online)
         self.controller_selector.setEnabled(not self._busy and not self._staged)
         self.export_button.setEnabled(online and not self._busy and not self._staged)
         self.choose_button.setEnabled(online and not self._busy and not self._staged)

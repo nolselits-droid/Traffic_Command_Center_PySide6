@@ -29,9 +29,6 @@ class ControlService(QObject):
         if self._reply is not None:
             self.failed.emit(controller_id, action, "Perintah lain masih diproses.")
             return
-        if not self.controller_service.is_live:
-            self.failed.emit(controller_id, action, "Traffic Control hanya tersedia pada LIVE API.")
-            return
         base_url = self.controller_service.base_url(controller_id)
         if not base_url:
             self.failed.emit(controller_id, action, "Base URL controller tidak tersedia.")
@@ -54,7 +51,7 @@ class ControlService(QObject):
         self.busy_changed.emit(True)
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.03")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
         request.setTransferTimeout(4500)
         reply = self._network.post(request, QByteArray())
         self._reply = reply

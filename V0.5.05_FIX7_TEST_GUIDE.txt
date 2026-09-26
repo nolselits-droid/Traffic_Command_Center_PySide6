@@ -1,0 +1,54 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX7 TEST
+=========================================
+
+TUJUAN UPDATE
+-------------
+Merapikan struktur UI Intersection Layout dan memadatkan tabel Camera Layout
+tanpa mengubah format data layout yang sudah tersimpan.
+
+PERUBAHAN INTERSECTION LAYOUT
+-----------------------------
+1. Pengaturan dibagi menjadi dua frame:
+   - INTERSECTION DIAGRAM
+   - SIGNAL GROUP CONFIGURATION
+2. INTERSECTION DIAGRAM berisi Diagram Type dan Rotation.
+3. SIGNAL GROUP CONFIGURATION berisi Selected SG, SG Rotation,
+   Vehicle Movement, dan Flow Direction.
+4. Note Movement dihapus dari panel agar lebih ringkas.
+5. Penjelasan Movement dan Flow Direction tersedia melalui tooltip.
+6. Label Flow Direction diperjelas menjadi:
+   - One Way → Intersection
+   - One Way ← Intersection
+   - Two Way
+   - Hidden
+7. Nilai internal INBOUND/OUTBOUND/TWO_WAY/HIDDEN tetap sama sehingga
+   file layout lama tetap kompatibel.
+
+PERUBAHAN CAMERA LAYOUT
+-----------------------
+1. Baris kamera dipaksa memiliki tinggi tetap 26 px.
+2. Jarak antarbaris dikurangi menjadi 1 px.
+3. Seluruh baris dirapatkan ke sisi atas tabel dan tidak lagi meregang
+   mengikuti tinggi panel.
+4. Margin vertikal setiap baris dibuat nol.
+5. Kotak ROW/COL/W/H tetap berukuran 42 x 24 px.
+6. Scrollbar tetap tersedia apabila jumlah kamera melebihi ruang tabel.
+
+PANDUAN UJI
+-----------
+1. Buka SYSTEM SETTINGS > INTERSECTION LAYOUT.
+2. Pastikan terlihat dua frame pengaturan yang terpisah.
+3. Pastikan note Movement lama sudah tidak tampil.
+4. Periksa empat pilihan Flow Direction dengan label baru.
+5. Ubah SG Rotation, Movement, dan Flow Direction lalu simpan layout.
+6. Tutup dan jalankan kembali aplikasi; pastikan layout tetap dimuat.
+7. Buka SYSTEM SETTINGS > CAMERA LAYOUT.
+8. Pastikan Camera SG1, SG2, dan seterusnya tersusun rapat dari atas.
+9. Pastikan baris tidak membesar walaupun jumlah kamera kurang dari lima.
+10. Ubah ROW/COL/W/H, simpan, lalu pastikan preview dan penyimpanan normal.
+
+BATASAN FIX7
+------------
+FIX7 belum menambahkan simpang lima, road-arm assignment, atau sinkronisasi
+Intersection Layout dengan ESP32-S3. Fitur tersebut direncanakan sebagai
+perubahan model pada versi berikutnya.

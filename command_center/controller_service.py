@@ -15,8 +15,10 @@ from PySide6.QtNetwork import (
 )
 
 from .camera_store import CameraRepository
-from .mock_data import build_mock_controllers, make_cameras
+from .display_layout import DisplayLayoutRepository
 from .models import (
+    CameraConfiguration,
+    CameraRole,
     ControllerMode,
     ControllerSnapshot,
     NetworkInterface,
@@ -50,6 +52,35 @@ def _normalise_base_url(value: str) -> str:
     return base_url
 
 
+def _make_default_cameras(
+    controller_number: int,
+    signal_group_count: int,
+) -> list[CameraConfiguration]:
+    """Create neutral camera slots without inventing road directions."""
+    subnet = 20 + controller_number
+    cameras = [
+        CameraConfiguration(
+            camera_id=f"TLC-{controller_number:03d}-SG{number}",
+            name=f"Camera SG{number}",
+            role=CameraRole.SIGNAL_GROUP,
+            signal_group=number,
+            host=f"192.168.{subnet}.{100 + number}",
+            online=False,
+        )
+        for number in range(1, signal_group_count + 1)
+    ]
+    cameras.append(
+        CameraConfiguration(
+            camera_id=f"TLC-{controller_number:03d}-PTZ",
+            name="Dome / PTZ · Overview",
+            role=CameraRole.PTZ,
+            host=f"192.168.{subnet}.120",
+            online=False,
+        )
+    )
+    return cameras
+
+
 class ControllerService(QObject):
     """Provides monitoring and configuration access for up to five TLCs."""
 
@@ -59,7 +90,6 @@ class ControllerService(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.controllers: list[ControllerSnapshot] = []
-        self.mode = "mock"
         self.poll_interval_ms = 1000
         self._entries = _default_entries()
         self._endpoints: dict[str, str] = {}
@@ -69,6 +99,7 @@ class ControllerService(QObject):
         self._failures: dict[str, int] = {}
         self._poll_suspended: dict[str, set[str]] = {}
         self.camera_repository = CameraRepository()
+        self.display_layout_repository = DisplayLayoutRepository(self)
 
         self._network = QNetworkAccessManager(self)
         self._timer = QTimer(self)
@@ -76,7 +107,6 @@ class ControllerService(QObject):
 
         settings = self._load_registry()
         self.apply_settings(
-            settings["mode"],
             settings["controllers"],
             persist=False,
             notify=False,
@@ -84,10 +114,6 @@ class ControllerService(QObject):
         self._timer.setInterval(self.poll_interval_ms)
         self._timer.start()
         QTimer.singleShot(100, self._tick)
-
-    @property
-    def is_live(self) -> bool:
-        return self.mode == "live"
 
     def get_controller(self, controller_id: str) -> ControllerSnapshot | None:
         return next(
@@ -104,13 +130,11 @@ class ControllerService(QObject):
 
     def apply_settings(
         self,
-        mode: str,
         entries: list[dict[str, Any]],
         *,
         persist: bool = True,
         notify: bool = True,
     ) -> None:
-        selected_mode = "live" if mode == "live" else "mock"
         normalised_entries = self._normalise_entries(entries)
 
         for reply in self._pending.values():
@@ -121,14 +145,10 @@ class ControllerService(QObject):
         self._failures.clear()
         self._poll_suspended.clear()
 
-        self.mode = selected_mode
         self._entries = normalised_entries
         self._endpoints.clear()
 
-        if self.mode == "mock":
-            self.controllers = build_mock_controllers()
-        else:
-            self.controllers = self._build_live_placeholders(normalised_entries)
+        self.controllers = self._build_live_placeholders(normalised_entries)
         for controller in self.controllers:
             self.camera_repository.apply_to_cameras(controller.cameras)
 
@@ -138,12 +158,9 @@ class ControllerService(QObject):
             self.controllers_changed.emit()
             for controller in self.controllers:
                 self.snapshot_updated.emit(controller.controller_id)
-            if self.is_live:
-                QTimer.singleShot(0, self.poll_now)
+            QTimer.singleShot(0, self.poll_now)
 
     def poll_now(self) -> None:
-        if not self.is_live:
-            return
         for controller in self.controllers:
             self._request_status(controller)
 
@@ -169,7 +186,7 @@ class ControllerService(QObject):
         owners.discard(owner)
         if not owners:
             self._poll_suspended.pop(controller_id, None)
-        if refresh and self.is_live and controller_id not in self._poll_suspended:
+        if refresh and controller_id not in self._poll_suspended:
             QTimer.singleShot(
                 120,
                 lambda key=controller_id: self._request_status_by_id(key),
@@ -181,38 +198,7 @@ class ControllerService(QObject):
             self._request_status(controller)
 
     def _tick(self) -> None:
-        if self.is_live:
-            self.poll_now()
-        else:
-            self._tick_mock()
-
-    def _tick_mock(self) -> None:
-        for controller in self.controllers:
-            if not controller.online or controller.mode in {
-                ControllerMode.HOLD,
-                ControllerMode.OFFLINE,
-            }:
-                continue
-
-            controller.remaining_seconds -= 1
-            if controller.remaining_seconds <= 0:
-                controller.current_stage = (
-                    controller.current_stage % controller.total_stages
-                ) + 1
-                controller.remaining_seconds = 30
-                for signal_group in controller.signal_groups:
-                    signal_group.aspect = (
-                        "GREEN"
-                        if signal_group.number
-                        == (
-                            (controller.current_stage - 1)
-                            % controller.active_signal_groups
-                        )
-                        + 1
-                        else "RED"
-                    )
-
-            self.snapshot_updated.emit(controller.controller_id)
+        self.poll_now()
 
     def _request_status(self, controller: ControllerSnapshot) -> None:
         controller_id = controller.controller_id
@@ -228,7 +214,7 @@ class ControllerService(QObject):
 
         request = QNetworkRequest(QUrl(f"{base_url}/api/status"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.03")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
         request.setTransferTimeout(1800)
         reply = self._network.get(request)
         self._pending[controller_id] = reply
@@ -351,6 +337,12 @@ class ControllerService(QObject):
             self._safe_int(payload.get("runtimeRevision"), 0),
         )
         snapshot.apply_state = str(payload.get("apply") or "UNKNOWN")
+        snapshot.config_dirty = bool(payload.get("dirty", False))
+        editor = payload.get("editor")
+        if not isinstance(editor, dict):
+            editor = {}
+        snapshot.editor_editing = bool(editor.get("editing", False))
+        snapshot.editor_modified = bool(editor.get("modified", False))
         controls = payload.get("controls")
         if not isinstance(controls, dict):
             controls = {}
@@ -402,7 +394,10 @@ class ControllerService(QObject):
                 controller_number = int(snapshot.controller_id.rsplit("-", 1)[1])
             except (IndexError, ValueError):
                 controller_number = 1
-            snapshot.cameras = make_cameras(controller_number, active_count)
+            snapshot.cameras = _make_default_cameras(
+                controller_number,
+                active_count,
+            )
             self.camera_repository.apply_to_cameras(snapshot.cameras)
             for camera in snapshot.cameras:
                 camera.online = False
@@ -411,30 +406,38 @@ class ControllerService(QObject):
         self,
         entries: list[dict[str, Any]],
     ) -> list[ControllerSnapshot]:
-        templates = build_mock_controllers()
         controllers: list[ControllerSnapshot] = []
         for index, entry in enumerate(entries):
             if not entry["enabled"]:
                 continue
-            snapshot = templates[index]
-            snapshot.controller_id = entry["controllerId"]
-            snapshot.name = entry["displayName"]
-            snapshot.ip_address = QUrl(entry["baseUrl"]).host() or entry["baseUrl"]
-            snapshot.online = False
-            snapshot.mode = ControllerMode.OFFLINE
-            snapshot.safety_status = "WAITING FOR DATA"
-            snapshot.current_plan = 0
-            snapshot.scheduled_plan = 0
-            snapshot.current_stage = 0
-            snapshot.total_stages = 0
-            snapshot.remaining_seconds = 0
-            snapshot.last_update_at = ""
-            snapshot.response_time_ms = None
-            snapshot.consecutive_failures = 0
-            for signal_group in snapshot.signal_groups:
-                signal_group.aspect = "OFF"
-            for camera in snapshot.cameras:
-                camera.online = False
+            try:
+                controller_number = int(
+                    str(entry["controllerId"]).rsplit("-", 1)[1]
+                )
+            except (IndexError, ValueError):
+                controller_number = index + 1
+            snapshot = ControllerSnapshot(
+                controller_id=entry["controllerId"],
+                name=entry["displayName"],
+                ip_address=(
+                    QUrl(entry["baseUrl"]).host() or entry["baseUrl"]
+                ),
+                network_interface=NetworkInterface.ETHERNET,
+                online=False,
+                mode=ControllerMode.OFFLINE,
+                safety_status="WAITING FOR DATA",
+                current_plan=0,
+                scheduled_plan=0,
+                current_stage=0,
+                total_stages=0,
+                remaining_seconds=0,
+                last_update_at="",
+                response_time_ms=None,
+                consecutive_failures=0,
+                active_signal_groups=0,
+                signal_groups=[],
+                cameras=_make_default_cameras(controller_number, 0),
+            )
             controllers.append(snapshot)
             self._endpoints[snapshot.controller_id] = entry["baseUrl"]
         return controllers
@@ -445,21 +448,19 @@ class ControllerService(QObject):
             if not isinstance(data, dict):
                 raise ValueError("Registry root must be an object")
             return {
-                "mode": "live" if data.get("mode") == "live" else "mock",
                 "controllers": self._normalise_entries(
                     data.get("controllers", [])
                 ),
             }
         except (OSError, ValueError, json.JSONDecodeError):
             return {
-                "mode": "mock",
                 "controllers": _default_entries(),
             }
 
     def _save_registry(self) -> None:
         REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "mode": self.mode,
+            "mode": "live",
             "pollIntervalMs": self.poll_interval_ms,
             "controllers": self._entries,
         }

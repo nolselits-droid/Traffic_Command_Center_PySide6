@@ -3,7 +3,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -42,7 +41,7 @@ class ControllerConfigView(QWidget):
         title = QLabel("Controller Connections")
         title.setObjectName("pageTitle")
         subtitle = muted_label(
-            "Pilih Mock Data atau hubungkan maksimal lima ESP32-S3 melalui GET /api/status"
+            "Hubungkan maksimal lima ESP32-S3 melalui LIVE API GET /api/status"
         )
         title_column.addWidget(title)
         title_column.addWidget(subtitle)
@@ -56,21 +55,21 @@ class ControllerConfigView(QWidget):
         panel_layout.setContentsMargins(16, 14, 16, 16)
         panel_layout.setSpacing(12)
 
-        mode_row = QHBoxLayout()
-        mode_label = QLabel("Data Source")
-        mode_label.setObjectName("sectionTitle")
-        self.mode_input = QComboBox()
-        self.mode_input.addItem("MOCK DATA · simulasi lokal", "mock")
-        self.mode_input.addItem("LIVE API · ESP32-S3", "live")
-        self.mode_input.currentIndexChanged.connect(self._mode_changed)
-        mode_row.addWidget(mode_label)
-        mode_row.addStretch()
-        mode_row.addWidget(self.mode_input)
-        panel_layout.addLayout(mode_row)
+        source_row = QHBoxLayout()
+        source_label = QLabel("Connection Source")
+        source_label.setObjectName("sectionTitle")
+        source_value = QLabel("LIVE API · ESP32-S3")
+        source_value.setObjectName("readOnlyValue")
+        source_row.addWidget(source_label)
+        source_row.addStretch()
+        source_row.addWidget(source_value)
+        panel_layout.addLayout(source_row)
 
         note = muted_label(
-            "LIVE API hanya membaca status. Aplikasi tidak mengirim SKIP, HOLD, "
-            "FLASHING, perubahan Plan, atau konfigurasi apa pun ke controller."
+            "LIVE API mengaktifkan monitoring dan halaman kontrol berpengaman. "
+            "Perintah Traffic Control, Traffic Configuration, Backup/Restore, "
+            "dan System Settings hanya dikirim dari halaman terkait setelah "
+            "validasi serta konfirmasi operator."
         )
         note.setWordWrap(True)
         panel_layout.addWidget(note)
@@ -123,43 +122,25 @@ class ControllerConfigView(QWidget):
         panel_layout.addStretch()
         root.addWidget(panel, 1)
 
-        mode_index = self.mode_input.findData(self.service.mode)
-        self.mode_input.setCurrentIndex(max(0, mode_index))
-        self._mode_changed()
-
-    def _mode_changed(self) -> None:
-        live = self.mode_input.currentData() == "live"
-        for widget in [
-            *self.enabled_inputs,
-            *self.name_inputs,
-            *self.url_inputs,
-        ]:
-            widget.setEnabled(live)
-        self.connect_button.setText(
-            "SAVE & CONNECT" if live else "USE MOCK DATA"
-        )
-
     def _save_and_connect(self) -> None:
-        mode = str(self.mode_input.currentData())
-        previous_mode = self.service.mode
         entries = []
         active_count = 0
         active_urls: set[str] = set()
         for index in range(5):
             enabled = self.enabled_inputs[index].isChecked()
             url = self.url_inputs[index].text().strip()
-            if mode == "live" and enabled and not url:
+            if enabled and not url:
                 self.result_label.setText(
                     f"TLC-{index + 1:03d}: IP atau Base URL belum diisi."
                 )
                 return
             comparable_url = url.lower().rstrip("/")
-            if mode == "live" and enabled and comparable_url in active_urls:
+            if enabled and comparable_url in active_urls:
                 self.result_label.setText(
                     f"TLC-{index + 1:03d}: alamat controller digunakan lebih dari satu slot."
                 )
                 return
-            if mode == "live" and enabled:
+            if enabled:
                 active_urls.add(comparable_url)
             active_count += int(enabled)
             entries.append(
@@ -172,7 +153,7 @@ class ControllerConfigView(QWidget):
                 }
             )
 
-        if mode == "live" and active_count == 0:
+        if active_count == 0:
             self.result_label.setText(
                 "Aktifkan minimal satu controller untuk menggunakan LIVE API."
             )
@@ -180,22 +161,17 @@ class ControllerConfigView(QWidget):
 
         if self.event_service:
             self.event_service.reset_monitoring_state()
-        self.service.apply_settings(mode, entries)
+        self.service.apply_settings(entries)
         if self.event_service:
             self.event_service.record_audit(
                 "SYSTEM",
                 "Command Center",
                 "Controller connection settings updated",
                 details=(
-                    f"Source: {previous_mode.upper()} -> {mode.upper()}; "
-                    f"enabled controllers: {active_count if mode == 'live' else 5}"
+                    "Source: LIVE API; "
+                    f"enabled controllers: {active_count}"
                 ),
             )
-        if mode == "live":
-            self.result_label.setText(
-                f"LIVE API aktif untuk {active_count} controller · polling 1 detik · Traffic Control guarded."
-            )
-        else:
-            self.result_label.setText(
-                "Mock Data aktif. Tidak ada koneksi jaringan ke controller."
-            )
+        self.result_label.setText(
+            f"LIVE API aktif untuk {active_count} controller · polling 1 detik · Traffic Control guarded."
+        )

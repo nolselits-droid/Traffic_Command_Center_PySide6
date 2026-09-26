@@ -1,0 +1,61 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX5 TEST
+LIVE TOPOLOGY SYNC & COMPACT INTERSECTION ACTIONS
+========================================================
+
+A. BUG AWAL PLACEHOLDER LIVE API
+--------------------------------
+1. Tutup aplikasi, pastikan controller ESP32-S3 aktif, lalu jalankan FIX5.
+2. Buka SYSTEM SETTINGS segera setelah aplikasi tampil.
+3. Tunggu controller ONLINE tanpa mengganti controller secara manual.
+4. Buka INTERSECTION LAYOUT dan pastikan Selected SG berisi seluruh SG aktif.
+5. Buka CAMERA LAYOUT dan pastikan Camera SG1 sampai jumlah SG aktif muncul,
+   bersama Dome/PTZ.
+
+
+B. SINKRONISASI TOPOLOGY SELEKTIF
+---------------------------------
+1. Biarkan aplikasi berjalan selama beberapa menit.
+2. Pastikan polling status satu detik tidak mereset Selected SG atau posisi
+   scroll daftar kamera.
+3. Ubah posisi SG tetapi jangan Save.
+4. Tunggu beberapa polling dan pastikan posisi yang belum disimpan tidak kembali
+   ke posisi sebelumnya.
+5. Ubah nama SG pada controller/System Settings, lalu pastikan nama pada Selected
+   SG ikut diperbarui setelah status controller diterima.
+
+
+C. POSISI LAYOUT TERSIMPAN
+--------------------------
+1. Gunakan layout FIX4 yang sudah mempunyai posisi khusus untuk SG1-SG4.
+2. Jalankan FIX5 dari kondisi aplikasi baru.
+3. Setelah topology 0 SG berubah menjadi SG aktual, pastikan posisi tersimpan
+   SG1-SG4 tetap digunakan dan tidak diganti default.
+4. Bandingkan posisi editor dengan LIVE VIEW.
+
+
+D. PERUBAHAN JUMLAH SG/KAMERA
+-----------------------------
+1. Jika memungkinkan, ubah jumlah SG aktif pada controller secara aman.
+2. Pastikan daftar Selected SG dan Camera Layout diperbarui satu kali ketika
+   topology berubah.
+3. Pastikan update warna SG, timer, status kamera online/offline, atau response
+   time tidak membangun ulang editor layout.
+
+
+E. TOMBOL INTERSECTION LAYOUT
+-----------------------------
+1. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+2. Pastikan RESET SG POSITIONS dan SAVE INTERSECTION LAYOUT berada pada satu
+   baris, bukan atas-bawah.
+3. Pastikan kedua tombol lebih kecil dan teks tetap terbaca.
+4. Uji Reset dan Save; pastikan fungsinya tetap sama.
+
+
+F. REGRESI FIX4
+---------------
+1. CONTROLLERS tetap hanya memakai LIVE API.
+2. Tidak ada data atau menu Mock.
+3. Status System Settings tetap berada di kanan CAMERA LAYOUT.
+4. Camera Layout tetap memakai tabel ringkas dan dua tombol sejajar.
+5. Traffic Configuration, Backup/Restore, Alarm/Event, kamera RTSP, serta
+   Traffic Control tetap normal.

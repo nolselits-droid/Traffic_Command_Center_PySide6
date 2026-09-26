@@ -1,0 +1,34 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX6 TEST
+=========================================
+
+TUJUAN UPDATE
+-------------
+Merapikan tabel Camera Layout dengan memperpendek kotak input ROW, COL,
+W, dan H serta merapatkan jarak antarbaris kamera.
+
+PERUBAHAN
+---------
+1. QSpinBox Camera Layout tidak lagi mengikuti min-height 36 px dari
+   stylesheet input global.
+2. Ukuran widget ROW/COL/W/H ditetapkan 42 x 24 px.
+3. Padding vertikal dan radius sudut dibuat lebih kecil.
+4. Font input tetap mudah dibaca pada ukuran 9 pt.
+5. Jarak antarbaris kamera dikurangi dari 4 px menjadi 2 px.
+6. Tombol panah naik/turun serta fungsi edit nilai tetap dipertahankan.
+
+PANDUAN UJI
+-----------
+1. Jalankan aplikasi dan buka SYSTEM SETTINGS > CAMERA LAYOUT.
+2. Pastikan kotak ROW/COL/W/H terlihat lebih pendek dan tidak lagi
+   berbentuk hampir persegi.
+3. Pastikan semua baris kamera tetap sejajar dengan header tabel.
+4. Ubah nilai ROW, COL, W, dan H memakai keyboard maupun tombol panah.
+5. Pastikan Camera Layout Preview mengikuti perubahan.
+6. Klik SAVE CAMERA LAYOUT, tutup aplikasi, lalu buka kembali.
+7. Pastikan nilai layout yang disimpan tetap dimuat dengan benar.
+
+CATATAN
+-------
+Update ini hanya mengubah kerapatan tampilan Camera Layout. Tidak ada
+perubahan pada API controller, konfigurasi traffic, layout intersection,
+atau penyimpanan data kamera.

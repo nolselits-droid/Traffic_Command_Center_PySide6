@@ -1,0 +1,63 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX3 TEST
+WIDE LAYOUT PANELS & CORRECTED TWO-WAY FLOW
+=========================================================
+
+A. INTERSECTION LAYOUT HORIZONTAL
+---------------------------------
+1. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+2. Pastikan seluruh menu setting berada pada panel kiri.
+3. Pastikan Intersection Diagram selalu terlihat pada panel kanan.
+4. Pastikan tidak perlu scroll halaman untuk berpindah dari setting ke diagram
+   pada layar Full HD.
+5. Drag SG, ubah rotation/movement, simpan, lalu cocokkan dengan LIVE VIEW.
+
+
+B. CAMERA LAYOUT HORIZONTAL
+---------------------------
+1. Buka SYSTEM SETTINGS -> CAMERA LAYOUT.
+2. Pastikan Layout Mode, Primary Camera, daftar kamera, dan tombol berada di kiri.
+3. Pastikan Camera Layout Preview tetap terlihat di kanan.
+4. Jika kamera banyak, pastikan hanya daftar kamera kiri yang dapat di-scroll.
+5. Pastikan AUTO dan CUSTOM GRID tetap berfungsi seperti FIX2.
+6. Drag tile pada CUSTOM GRID dan pastikan Row/Column di kiri ikut berubah.
+
+
+C. MOVEMENT INBOUND
+-------------------
+1. Pilih SG pada arah Utara dan Flow Direction = Inbound.
+2. Uji Left saja: harus hanya ada satu flow Left.
+3. Uji Right saja: harus hanya ada satu flow Right.
+4. Uji Straight saja: harus hanya ada satu flow Straight.
+5. Uji Straight + Left + Right: harus ada tiga flow masuk.
+6. Ingat bahwa checkbox bersifat kombinasi; mencentang Left tidak otomatis
+   melepaskan Straight.
+
+
+D. PERBAIKAN TWO-WAY
+--------------------
+1. Pilih SG arah Utara, Movement = Left saja, Flow Direction = Two-Way.
+2. Pastikan muncul satu flow Left masuk dan satu flow lurus keluar pada lajur
+   sebelah.
+3. Pastikan tidak muncul reverse-turn atau flow belok tambahan.
+4. Ulangi untuk Right saja.
+5. Ulangi untuk Straight + Left dan Straight + Left + Right.
+6. Flow keluar harus tetap hanya satu, berapa pun jumlah movement masuk.
+7. Pastikan kedua arah memakai lajur kiri masing-masing dan bukan garis tengah.
+
+
+E. OUTBOUND
+-----------
+1. Pilih Flow Direction = Outbound.
+2. Pastikan hanya satu panah lurus keluar pada road arm SG yang dipilih.
+3. Ubah checkbox movement dan pastikan flow outbound tidak berubah menjadi
+   rute belok atau bertambah jumlahnya.
+
+
+F. REGRESI
+----------
+1. Save dan restart aplikasi; layout harus tetap tersimpan.
+2. Camera stream, fullscreen, retry, dan Camera Configuration tetap normal.
+3. Posisi SG editor dan LIVE VIEW tetap konsisten.
+4. Sidebar hide/open tidak menggeser posisi relatif SG.
+5. SKIP, HOLD, FLASHING, Alarm/Event, Traffic Configuration, serta Backup &
+   Restore tetap normal.

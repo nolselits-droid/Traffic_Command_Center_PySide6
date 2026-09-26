@@ -68,6 +68,9 @@ class ControllerSnapshot:
     config_revision: int = 1
     runtime_revision: int = 1
     apply_state: str = "UNKNOWN"
+    config_dirty: bool = False
+    editor_editing: bool = False
+    editor_modified: bool = False
     web_hold_active: bool = False
     hold_active: bool = False
     hold_remaining_seconds: int = 0

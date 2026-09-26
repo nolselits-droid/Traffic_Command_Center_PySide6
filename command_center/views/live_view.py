@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from math import ceil
-
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -9,7 +7,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -18,8 +15,9 @@ from PySide6.QtWidgets import (
 
 from ..controller_service import ControllerService
 from ..control_service import ControlService
+from ..display_layout import automatic_camera_positions
 from ..event_service import EventService
-from ..models import CameraConfiguration, CameraRole, ControllerMode, ControllerSnapshot
+from ..models import CameraConfiguration, ControllerMode, ControllerSnapshot
 from ..vlc_player import (
     FullscreenCameraDialog,
     VlcPlayerController,
@@ -243,6 +241,7 @@ class LiveView(QWidget):
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("liveViewPage")
         self.service = service
         self.event_service = event_service
         self.control_service = ControlService(service, self)
@@ -252,6 +251,7 @@ class LiveView(QWidget):
         self.camera_tiles: list[CameraTile] = []
         self.command_buttons: dict[str, QPushButton] = {}
         self._control_busy = False
+        self._pending_control_text = ""
         self.streaming_active = False
 
         root = QVBoxLayout(self)
@@ -288,14 +288,20 @@ class LiveView(QWidget):
         self.scheduled_plan_metric = MetricCell("Scheduled Plan")
         self.remaining_metric = MetricCell("Remaining Time")
         self.revision_metric = MetricCell("Config / Runtime Rev")
-        for metric in [
+        self.live_metrics = [
             self.mode_metric,
             self.safety_metric,
             self.current_plan_metric,
             self.stage_metric,
             self.scheduled_plan_metric,
             self.remaining_metric,
-        ]:
+            self.revision_metric,
+        ]
+        for metric in self.live_metrics:
+            metric.value_label.setStyleSheet("")
+            metric.value_label.setProperty("liveMetric", True)
+            metric.value_label.setProperty("metricState", "info")
+        for metric in self.live_metrics[:-1]:
             summary_layout.addWidget(metric, 1)
         self.revision_metric.setMinimumWidth(168)
         self.revision_metric.value_label.setProperty(
@@ -313,6 +319,7 @@ class LiveView(QWidget):
 
         body = QHBoxLayout()
         body.setSpacing(11)
+        self.body_layout = body
 
         self.camera_panel = QFrame()
         self.camera_panel.setObjectName("contentPanel")
@@ -381,7 +388,11 @@ class LiveView(QWidget):
             command_row.addWidget(button, 0, column)
             self.command_buttons[command] = button
         control_layout.addLayout(command_row)
-        self.command_message = muted_label("Traffic Control ready · MOCK MODE")
+        self.command_message = muted_label(
+            "Traffic Control menunggu status controller"
+        )
+        self.command_message.setObjectName("trafficControlMessage")
+        self.command_message.setProperty("controlState", "normal")
         self.command_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         control_layout.addWidget(self.command_message)
         body.addWidget(self.control_panel)
@@ -394,7 +405,29 @@ class LiveView(QWidget):
         self.control_service.completed.connect(self._control_completed)
         self.control_service.failed.connect(self._control_failed)
         self.control_service.busy_changed.connect(self._control_busy_changed)
+        self.service.display_layout_repository.layout_changed.connect(
+            self._display_layout_changed
+        )
         self._controllers_changed()
+
+    def freeze_control_panel_width(
+        self,
+        preferred_width: int | None = None,
+    ) -> int:
+        """Keep the intersection/control panel stable while camera area grows."""
+        measured = self.control_panel.width()
+        width = preferred_width if preferred_width and preferred_width > 0 else measured
+        if width < 340:
+            width = 460
+        width = max(340, min(620, int(width)))
+        self.control_panel.setFixedWidth(width)
+        self.control_panel.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
+        )
+        self.body_layout.setStretch(0, 1)
+        self.body_layout.setStretch(1, 0)
+        return width
 
     def _controllers_changed(self) -> None:
         previous = self.current_controller_id
@@ -408,11 +441,10 @@ class LiveView(QWidget):
         self.controller_selector.blockSignals(False)
 
         for button in self.command_buttons.values():
-            button.setEnabled(not self.service.is_live)
-        self.command_message.setText(
-            "Traffic Control menunggu status controller"
-            if self.service.is_live
-            else "Traffic Control ready · MOCK MODE"
+            button.setEnabled(False)
+        self._set_command_message(
+            "Traffic Control menunggu status controller",
+            "waiting",
         )
 
         if not self.service.controllers:
@@ -428,6 +460,15 @@ class LiveView(QWidget):
             self.intersection_diagram.set_signal_groups([])
             self.revision_metric.set_value("— / — · OFFLINE")
             self._set_revision_state("offline")
+            self._set_metric_state(self.mode_metric, "offline")
+            self._set_metric_state(self.safety_metric, "offline")
+            for metric in (
+                self.current_plan_metric,
+                self.stage_metric,
+                self.scheduled_plan_metric,
+                self.remaining_metric,
+            ):
+                self._set_metric_state(metric, "offline")
             self._stop_all_cameras(emit_status=False)
             self._clear_layout(self.camera_grid)
             self.camera_tiles.clear()
@@ -454,13 +495,21 @@ class LiveView(QWidget):
             self.controller_selector.setCurrentIndex(index)
             self.controller_selector.blockSignals(False)
         self._rebuild_cameras(snapshot)
+        display_layout = self.service.display_layout_repository.get(
+            snapshot.controller_id,
+            snapshot.active_signal_groups,
+            snapshot.cameras,
+        )
+        self.intersection_diagram.set_layout_config(
+            display_layout.intersection
+        )
         self.intersection_diagram.set_signal_groups(snapshot.signal_groups)
         self._update_extra_signal_text(snapshot)
         self._apply_snapshot(snapshot)
 
     def set_streaming_active(self, active: bool) -> None:
         self.streaming_active = active
-        if active and self.service.is_live:
+        if active:
             for tile in self.camera_tiles:
                 tile.start()
         else:
@@ -482,45 +531,70 @@ class LiveView(QWidget):
         self._stop_all_cameras(emit_status=False)
         self._clear_layout(self.camera_grid)
         self.camera_tiles.clear()
-        fixed_cameras = [
-            camera for camera in snapshot.cameras
-            if camera.role == CameraRole.SIGNAL_GROUP and camera.enabled
+        display_layout = self.service.display_layout_repository.get(
+            snapshot.controller_id,
+            snapshot.active_signal_groups,
+            snapshot.cameras,
+        )
+        cameras = [
+            camera
+            for camera in snapshot.cameras
+            if camera.enabled
+            and display_layout.cameras.tiles.get(camera.camera_id)
+            and display_layout.cameras.tiles[camera.camera_id].visible
         ]
-        ptz = next(
-            (
-                camera for camera in snapshot.cameras
-                if camera.role == CameraRole.PTZ and camera.enabled
-            ),
-            None,
+        cameras.sort(
+            key=lambda camera: display_layout.cameras.tiles[
+                camera.camera_id
+            ].order
         )
 
-        if not fixed_cameras and ptz is None:
+        if not cameras:
             empty_label = muted_label(
-                "No camera enabled · buka CAMERA CONFIGURATION"
+                "No camera selected · buka SYSTEM SETTINGS / CAMERA LAYOUT"
             )
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.camera_grid.addWidget(empty_label, 0, 0, 1, 4)
+            return
 
-        rows = max(2, ceil(len(fixed_cameras) / 2))
-        if ptz:
-            tile = CameraTile(ptz)
-            self._connect_camera_tile(tile)
-            self.camera_grid.addWidget(tile, 0, 0, rows, 2)
-            self.camera_tiles.append(tile)
+        if display_layout.cameras.mode == "CUSTOM":
+            positions = {
+                camera.camera_id: (
+                    display_layout.cameras.tiles[camera.camera_id].row,
+                    display_layout.cameras.tiles[camera.camera_id].column,
+                    display_layout.cameras.tiles[camera.camera_id].row_span,
+                    display_layout.cameras.tiles[camera.camera_id].column_span,
+                )
+                for camera in cameras
+            }
+        else:
+            positions = automatic_camera_positions(
+                cameras,
+                display_layout.cameras.primary_camera_id,
+            )
 
-        for index, camera in enumerate(fixed_cameras):
-            row = index // 2
-            column = 2 + (index % 2)
+        maximum_row = 0
+        maximum_column = 0
+        for camera in cameras:
+            row, column, row_span, column_span = positions[camera.camera_id]
             tile = CameraTile(camera)
             self._connect_camera_tile(tile)
-            self.camera_grid.addWidget(tile, row, column)
+            self.camera_grid.addWidget(
+                tile,
+                row,
+                column,
+                row_span,
+                column_span,
+            )
             self.camera_tiles.append(tile)
+            maximum_row = max(maximum_row, row + row_span)
+            maximum_column = max(maximum_column, column + column_span)
 
-        for column in range(4):
+        for column in range(max(1, maximum_column)):
             self.camera_grid.setColumnStretch(column, 1)
-        for row in range(rows):
+        for row in range(max(1, maximum_row)):
             self.camera_grid.setRowStretch(row, 1)
-        if self.streaming_active and self.service.is_live:
+        if self.streaming_active:
             for tile in self.camera_tiles:
                 tile.start()
 
@@ -556,14 +630,24 @@ class LiveView(QWidget):
         tile.stop(emit_status=False)
         dialog = FullscreenCameraDialog(camera, self)
         dialog.open_fullscreen()
-        if self.streaming_active and self.service.is_live:
+        if self.streaming_active:
             tile.start()
 
     def _apply_snapshot(self, snapshot: ControllerSnapshot) -> None:
-        enabled_camera_count = sum(
-            camera.enabled for camera in snapshot.cameras
+        display_layout = self.service.display_layout_repository.get(
+            snapshot.controller_id,
+            snapshot.active_signal_groups,
+            snapshot.cameras,
         )
-        if len(self.camera_tiles) != enabled_camera_count:
+        visible_camera_ids = {
+            camera.camera_id
+            for camera in snapshot.cameras
+            if camera.enabled
+            and display_layout.cameras.tiles.get(camera.camera_id)
+            and display_layout.cameras.tiles[camera.camera_id].visible
+        }
+        tile_ids = {tile.camera.camera_id for tile in self.camera_tiles}
+        if tile_ids != visible_camera_ids:
             self._rebuild_cameras(snapshot)
         self.title.setText(snapshot.name)
         identity = (
@@ -588,6 +672,38 @@ class LiveView(QWidget):
             "HOLD"
             if snapshot.mode == ControllerMode.HOLD
             else f"{snapshot.remaining_seconds:02d} s"
+        )
+        mode_state = (
+            "offline"
+            if not snapshot.online
+            else "normal"
+            if snapshot.mode == ControllerMode.NORMAL
+            else "warning"
+            if snapshot.mode in {ControllerMode.HOLD, ControllerMode.FLASHING}
+            else "fault"
+        )
+        self._set_metric_state(self.mode_metric, mode_state)
+        self._set_metric_state(
+            self.safety_metric,
+            "offline"
+            if not snapshot.online
+            else "normal"
+            if snapshot.safety_status == "OK"
+            else "fault",
+        )
+        for metric in (
+            self.current_plan_metric,
+            self.stage_metric,
+            self.scheduled_plan_metric,
+        ):
+            self._set_metric_state(metric, "info" if snapshot.online else "offline")
+        self._set_metric_state(
+            self.remaining_metric,
+            "warning"
+            if snapshot.mode == ControllerMode.HOLD
+            else "info"
+            if snapshot.online
+            else "offline",
         )
         self._update_revision_metric(snapshot)
 
@@ -649,20 +765,46 @@ class LiveView(QWidget):
         if label.property("revisionState") == state:
             return
         label.setProperty("revisionState", state)
+        label.setProperty(
+            "metricState",
+            {
+                "synced": "normal",
+                "pending": "warning",
+                "applying": "applying",
+                "fault": "fault",
+                "offline": "offline",
+            }.get(state, "unknown"),
+        )
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+    @staticmethod
+    def _set_metric_state(metric: MetricCell, state: str) -> None:
+        label = metric.value_label
+        if label.property("metricState") == state:
+            return
+        label.setProperty("metricState", state)
         label.style().unpolish(label)
         label.style().polish(label)
 
     def _update_extra_signal_text(self, snapshot: ControllerSnapshot) -> None:
-        if len(snapshot.signal_groups) <= 4:
-            self.extra_signal_label.clear()
+        del snapshot
+        self.extra_signal_label.clear()
+
+    def _display_layout_changed(self, controller_id: str) -> None:
+        if controller_id != self.current_controller_id:
             return
-        self.extra_signal_label.setText(
-            "Additional SG · "
-            + "  ".join(
-                f"SG{item.number}:{item.aspect[0]}"
-                for item in snapshot.signal_groups[4:]
-            )
+        snapshot = self.service.get_controller(controller_id)
+        if snapshot is None:
+            return
+        layout = self.service.display_layout_repository.get(
+            controller_id,
+            snapshot.active_signal_groups,
+            snapshot.cameras,
         )
+        self.intersection_diagram.set_layout_config(layout.intersection)
+        self.intersection_diagram.set_signal_groups(snapshot.signal_groups)
+        self._rebuild_cameras(snapshot)
 
     def _snapshot_updated(self, controller_id: str) -> None:
         if controller_id != self.current_controller_id:
@@ -677,21 +819,7 @@ class LiveView(QWidget):
                 )
             self._apply_snapshot(snapshot)
 
-    def _mock_command(self, command: str) -> None:
-        if self.service.is_live:
-            self.command_message.setText(
-                "Read-only monitoring · perintah tidak dikirim"
-            )
-            return
-        self.command_message.setText(
-            f"{command} selected · simulasi, tidak ada perintah dikirim"
-        )
-
     def _update_control_buttons(self, snapshot: ControllerSnapshot) -> None:
-        if not self.service.is_live:
-            for button in self.command_buttons.values():
-                button.setEnabled(not self._control_busy)
-            return
         safe = snapshot.online and snapshot.safety_status == "OK"
         idle = snapshot.apply_state == "IDLE"
         wait = snapshot.apply_state == "WAIT"
@@ -750,51 +878,54 @@ class LiveView(QWidget):
         else:
             message = "Traffic Control ready"
         if not self._control_busy:
-            self.command_message.setText(message)
+            state = (
+                "error"
+                if not snapshot.online or snapshot.safety_status != "OK"
+                else "warning"
+                if (
+                    snapshot.web_flashing_active
+                    or snapshot.local_flashing_active
+                    or snapshot.web_hold_active
+                    or snapshot.hold_active
+                    or snapshot.skip_pending
+                    or not idle
+                )
+                else "normal"
+            )
+            self._set_command_message(message, state)
 
     def _control_command(self, command: str) -> None:
         snapshot = self.service.get_controller(self.current_controller_id)
         if not snapshot:
             return
-        if not self.service.is_live:
-            self._mock_command(command)
-            return
         action = command.lower()
         active: bool | None = None
         if command == "SKIP":
-            prompt = (
-                "Kirim perintah SKIP ke controller?\n\n"
-                "Controller tetap memeriksa Minimum Green dan dapat menunda atau menolak SKIP."
-            )
+            self._pending_control_text = "SENDING SKIP REQUEST..."
         elif command == "HOLD":
             active = not snapshot.web_hold_active
-            prompt = (
-                "Batalkan WEB HOLD dan lanjutkan countdown Stage?"
+            self._pending_control_text = (
+                "RELEASING WEB HOLD..."
                 if not active
-                else "Aktifkan TIMED HOLD?\n\nStage countdown akan dibekukan sampai Hold Duration habis."
+                else "ACTIVATING TIMED HOLD..."
             )
         else:
             active = not snapshot.web_flashing_active
-            prompt = (
-                "Hentikan WEB FLASHING dan pulihkan Current Stage?"
+            self._pending_control_text = (
+                "STOPPING WEB FLASHING..."
                 if not active
-                else "Aktifkan WEB FLASHING?\n\nActive Signal Group akan Yellow Flashing 500 ms dan traffic timer dipause."
+                else "ACTIVATING YELLOW FLASHING 500 MS..."
             )
-        answer = QMessageBox.question(
-            self,
-            f"Confirm {command}",
-            prompt,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
+        self._set_command_message(self._pending_control_text, "sending")
         self.control_service.send(snapshot.controller_id, action, active)
 
     def _control_busy_changed(self, busy: bool) -> None:
         self._control_busy = busy
         if busy:
-            self.command_message.setText("Sending Traffic Control command...")
+            self._set_command_message(
+                self._pending_control_text or "SENDING TRAFFIC CONTROL COMMAND...",
+                "sending",
+            )
             for button in self.command_buttons.values():
                 button.setEnabled(False)
         else:
@@ -811,7 +942,8 @@ class LiveView(QWidget):
         if controller_id != self.current_controller_id or not isinstance(payload, dict):
             return
         message = str(payload.get("message") or f"{action.upper()} completed.")
-        self.command_message.setText(message)
+        self._pending_control_text = ""
+        self._set_command_message(message, "success")
         snapshot = self.service.get_controller(controller_id)
         if snapshot and self.event_service:
             self.event_service.record_audit(
@@ -824,8 +956,11 @@ class LiveView(QWidget):
     def _control_failed(self, controller_id: str, action: str, message: str) -> None:
         if controller_id != self.current_controller_id:
             return
-        self.command_message.setText(f"{action.upper()} rejected · {message}")
-        QMessageBox.warning(self, "Traffic Control Rejected", message)
+        self._pending_control_text = ""
+        self._set_command_message(
+            f"{action.upper()} REJECTED · {message}",
+            "error",
+        )
         snapshot = self.service.get_controller(controller_id)
         if snapshot and self.event_service:
             self.event_service.record_audit(
@@ -834,3 +969,9 @@ class LiveView(QWidget):
                 f"Traffic Control {action.upper()} rejected",
                 details=message,
             )
+
+    def _set_command_message(self, text: str, state: str) -> None:
+        self.command_message.setText(text)
+        self.command_message.setProperty("controlState", state)
+        self.command_message.style().unpolish(self.command_message)
+        self.command_message.style().polish(self.command_message)

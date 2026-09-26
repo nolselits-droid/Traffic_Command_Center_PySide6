@@ -1,0 +1,74 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX4 TEST
+LIVE API ONLY, SYSTEM STATUS & COMPACT CAMERA TABLE
+===========================================================
+
+A. PENGHAPUSAN MOCK DATA
+------------------------
+1. Buka CONTROLLERS.
+2. Pastikan Data Source tidak memiliki pilihan MOCK DATA.
+3. Pastikan hanya tertulis Connection Source: LIVE API · ESP32-S3.
+4. Pastikan tombol hanya SAVE & CONNECT.
+5. Periksa Overview, Live View, Traffic Configuration, System Settings, serta
+   Backup & Restore; tidak boleh ada teks MOCK DATA atau MOCK MODE.
+
+
+B. MIGRASI CONTROLLERS.JSON
+---------------------------
+1. Jika file lama berisi "mode": "mock", jalankan FIX4.
+2. Pastikan aplikasi tetap membuka daftar controller lama.
+3. Pastikan controller enabled langsung menggunakan Base URL yang tersimpan.
+4. Setelah SAVE & CONNECT, pastikan file tersimpan dengan "mode": "live".
+5. Saat controller tidak terhubung, aplikasi harus menampilkan OFFLINE dan
+   tidak menggantikannya dengan data simulasi.
+
+
+C. DATA ESP32-S3
+----------------
+1. Sambungkan controller dan tunggu status ONLINE.
+2. Cocokkan Mode, Safety, Plan, Scheduled Plan, Stage, Remaining Time, SG,
+   Config Revision, dan Runtime Revision dengan dashboard ESP32-S3.
+3. Lepas LAN dan pastikan status menjadi OFFLINE tanpa data Mock.
+4. Pasang kembali LAN dan pastikan polling serta status pulih otomatis.
+5. Buka Traffic Configuration dan pastikan Plan, Stage, Schedule, serta Holiday
+   dibaca dari controller.
+
+
+D. SLOT KAMERA NETRAL
+---------------------
+1. Sambungkan controller dengan beberapa SG aktif.
+2. Pastikan slot awal bernama Camera SG1, Camera SG2, dan seterusnya; tidak ada
+   nama arah buatan seperti Arah Utara.
+3. Pastikan konfigurasi kamera yang pernah disimpan di PC tetap diterapkan.
+4. Pastikan PTZ tetap tersedia sebagai Dome / PTZ · Overview.
+
+
+E. STATUS SYSTEM SETTINGS
+-------------------------
+1. Buka SYSTEM SETTINGS.
+2. Pastikan baris notifikasi di bawah tab sudah tidak ada.
+3. Pastikan status tampil di kanan CAMERA LAYOUT pada tab bar.
+4. Pastikan font status lebih kecil, tidak bold, dan warna status tetap benar.
+5. Picu pesan panjang dan pastikan tampil dengan elipsis; arahkan mouse untuk
+   melihat pesan lengkap melalui tooltip.
+
+
+F. CAMERA LAYOUT
+----------------
+1. Buka SYSTEM SETTINGS -> CAMERA LAYOUT.
+2. Pastikan header tabel: SHOW, CAMERA, ROW, COL, W, H.
+3. Pastikan input ROW/COL/W/H lebih kecil tetapi masih dapat diedit.
+4. Pastikan W dan H mempunyai tooltip Width dan Height.
+5. Pastikan catatan AUTO adapts... sudah dihapus.
+6. Pastikan AUTO ARRANGE CUSTOM GRID dan SAVE CAMERA LAYOUT lebih kecil serta
+   berada bersebelahan pada satu baris.
+7. Uji Auto Layout, Custom Grid, drag tile, edit Row/Column/Width/Height, Save,
+   restart aplikasi, lalu pastikan layout tetap tersimpan.
+
+
+G. REGRESI
+----------
+1. Overview, Live View, kamera RTSP, fullscreen, serta retry tetap normal.
+2. SKIP, HOLD, FLASHING hanya aktif saat controller online dan aman.
+3. Traffic Configuration, System Settings, Alarm/Event, dan Backup/Restore
+   tetap berfungsi.
+4. Intersection Layout serta flow Two-Way FIX3 tetap benar.

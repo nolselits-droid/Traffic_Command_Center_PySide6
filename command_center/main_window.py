@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -25,6 +25,7 @@ from .views.controller_config_view import ControllerConfigView
 from .views.live_view import LiveView
 from .views.overview_view import OverviewView
 from .views.placeholder_view import PlaceholderView
+from .views.system_settings_view import SystemSettingsView
 from .views.traffic_config_view import TrafficConfigView
 from .widgets.common import muted_label, status_label
 
@@ -32,12 +33,21 @@ from .widgets.common import muted_label, status_label
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Traffic Command Center V0.5.03")
+        self.setWindowTitle("Traffic Command Center V0.5.05 FIX7 TEST")
         self.setMinimumSize(1180, 700)
         self.resize(1600, 900)
 
         self.service = ControllerService(self)
         self.event_service = EventService(self.service, self)
+        self.ui_settings = QSettings(
+            "Nolselits",
+            "TrafficCommandCenter",
+        )
+        self._sidebar_visible = self.ui_settings.value(
+            "ui/sidebarVisible",
+            True,
+            type=bool,
+        )
         self.pages: dict[str, QWidget] = {}
         self.nav_buttons: dict[str, QPushButton] = {}
 
@@ -61,31 +71,36 @@ class MainWindow(QMainWindow):
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
-        body.addWidget(self._build_sidebar())
+        self.sidebar = self._build_sidebar()
+        body.addWidget(self.sidebar)
 
         self.stack = QStackedWidget()
         body.addWidget(self.stack, 1)
         root.addLayout(body, 1)
 
         self._create_pages()
+        self._apply_sidebar_visibility(persist=False)
         self.stack.currentChanged.connect(self._stack_page_changed)
         self.service.snapshot_updated.connect(self._update_global_status)
         self.service.controllers_changed.connect(self._update_global_status)
         self._update_global_status()
         self.navigate("overview")
         self.statusBar().showMessage(
-            "V0.5.03 · Traffic Configuration · Traffic Control · Backup & Restore"
+            "V0.5.05 FIX7 TEST · Refined Intersection & Camera Layout UI"
         )
         self.event_service.record_audit(
             "SYSTEM",
             "Command Center",
-            "Command Center V0.5.03 started",
+            "Command Center V0.5.05 FIX7 TEST started",
         )
 
         fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
         fullscreen_shortcut.activated.connect(self._toggle_fullscreen)
         escape_shortcut = QShortcut(QKeySequence("Esc"), self)
         escape_shortcut.activated.connect(self._leave_fullscreen)
+        sidebar_shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
+        sidebar_shortcut.activated.connect(self._toggle_sidebar)
+        self.sidebar_shortcut = sidebar_shortcut
 
     def _build_top_bar(self) -> QFrame:
         frame = QFrame()
@@ -94,11 +109,20 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(20, 9, 20, 9)
 
+        self.sidebar_toggle_button = QPushButton("☰")
+        self.sidebar_toggle_button.setObjectName("sidebarToggleButton")
+        self.sidebar_toggle_button.setFixedSize(38, 38)
+        self.sidebar_toggle_button.clicked.connect(self._toggle_sidebar)
+        layout.addWidget(self.sidebar_toggle_button)
+        layout.addSpacing(4)
+
         identity = QVBoxLayout()
         identity.setSpacing(1)
         title = QLabel("TRAFFIC COMMAND CENTER")
         title.setObjectName("appTitle")
-        subtitle = muted_label("Central Monitoring & Control · PySide6 V0.5.03")
+        subtitle = muted_label(
+            "Central Monitoring & Control · PySide6 V0.5.05 FIX7 TEST"
+        )
         identity.addWidget(title)
         identity.addWidget(subtitle)
         layout.addLayout(identity)
@@ -152,8 +176,8 @@ class MainWindow(QMainWindow):
             ("camera", "CAMERA CONFIGURATION"),
             ("alarms", "ALARMS & EVENTS"),
             ("backup", "BACKUP & RESTORE"),
-            ("users", "USERS"),
             ("system", "SYSTEM SETTINGS"),
+            ("users", "USERS"),
         ]
         for key, text in definitions:
             button = QPushButton(text)
@@ -194,17 +218,14 @@ class MainWindow(QMainWindow):
             BackupRestoreView(self.service, self.event_service),
         )
         self._add_page(
+            "system",
+            SystemSettingsView(self.service, self.event_service),
+        )
+        self._add_page(
             "users",
             PlaceholderView(
                 "Users",
                 "Role Monitor, Operator dan Engineer/Admin akan ditambahkan pada tahap keamanan.",
-            ),
-        )
-        self._add_page(
-            "system",
-            PlaceholderView(
-                "System Settings",
-                "Konfigurasi aplikasi, database, interval monitoring dan penyimpanan terenkripsi.",
             ),
         )
 
@@ -228,17 +249,63 @@ class MainWindow(QMainWindow):
         self.navigate("live")
 
     def _update_clock(self) -> None:
-        self.clock_label.setText(datetime.now().strftime("%d/%m/%Y  %H:%M:%S"))
+        self.clock_label.setText(datetime.now().strftime("%H:%M:%S  %d/%m/%Y"))
+
+    def _toggle_sidebar(self) -> None:
+        self._sidebar_visible = not self._sidebar_visible
+        self._apply_sidebar_visibility(persist=True)
+
+    def _apply_sidebar_visibility(self, *, persist: bool) -> None:
+        live_view = self.pages.get("live")
+        if (
+            not self._sidebar_visible
+            and isinstance(live_view, LiveView)
+        ):
+            stored_width = self.ui_settings.value(
+                "ui/liveControlPanelWidth",
+                0,
+                type=int,
+            )
+            fixed_width = live_view.freeze_control_panel_width(
+                None if persist else stored_width
+            )
+            self.ui_settings.setValue(
+                "ui/liveControlPanelWidth",
+                fixed_width,
+            )
+        if hasattr(self, "sidebar"):
+            self.sidebar.setVisible(self._sidebar_visible)
+        if hasattr(self, "sidebar_toggle_button"):
+            self.sidebar_toggle_button.setToolTip(
+                "Hide navigation · Ctrl+B"
+                if self._sidebar_visible
+                else "Open navigation · Ctrl+B"
+            )
+            self.sidebar_toggle_button.setProperty(
+                "sidebarOpen",
+                self._sidebar_visible,
+            )
+            self.sidebar_toggle_button.style().unpolish(
+                self.sidebar_toggle_button
+            )
+            self.sidebar_toggle_button.style().polish(
+                self.sidebar_toggle_button
+            )
+        if persist:
+            self.ui_settings.setValue(
+                "ui/sidebarVisible",
+                self._sidebar_visible,
+            )
+            self.ui_settings.sync()
 
     def _update_global_status(self, *_args) -> None:
         total = len(self.service.controllers)
         online = sum(item.online for item in self.service.controllers)
-        source = "LIVE" if self.service.is_live else "MOCK"
         if not total:
-            text = f"● NO CONTROLLER · {source}"
+            text = "● NO CONTROLLER · LIVE"
             status = "offline"
         else:
-            text = f"● {online}/{total} ONLINE · {source}"
+            text = f"● {online}/{total} ONLINE · LIVE"
             status = "online" if online == total else "warning"
         self.global_status_label.setText(text)
         self.global_status_label.setProperty("status", status)
@@ -255,6 +322,11 @@ class MainWindow(QMainWindow):
         if isinstance(traffic_view, TrafficConfigView):
             traffic_view.set_active(
                 self.stack.currentWidget() is traffic_view
+            )
+        system_view = self.pages.get("system")
+        if isinstance(system_view, SystemSettingsView):
+            system_view.set_active(
+                self.stack.currentWidget() is system_view
             )
 
     def _update_alarm_badge(

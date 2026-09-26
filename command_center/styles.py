@@ -70,6 +70,61 @@ QLabel[revisionState="unknown"] {
     color: #87919c;
 }
 
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"] {
+    font-size: 18px;
+    font-weight: 700;
+    background-color: transparent;
+}
+
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="normal"] {
+    color: #72deb9;
+}
+
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="info"] {
+    color: #79c7ff;
+}
+
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="warning"] {
+    color: #ffc45f;
+}
+
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="applying"] {
+    color: #8fcdf8;
+}
+
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="fault"] {
+    color: #ff858d;
+}
+
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="offline"],
+QWidget#liveViewPage QFrame#metricCell QLabel[liveMetric="true"][metricState="unknown"] {
+    color: #87919c;
+}
+
+QLabel#trafficControlMessage {
+    min-height: 22px;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+QLabel#trafficControlMessage[controlState="normal"],
+QLabel#trafficControlMessage[controlState="success"] {
+    color: #72deb9;
+}
+
+QLabel#trafficControlMessage[controlState="waiting"] {
+    color: #ffc45f;
+}
+
+QLabel#trafficControlMessage[controlState="sending"] {
+    color: #79c7ff;
+}
+
+QLabel#trafficControlMessage[controlState="error"] {
+    color: #ff858d;
+}
+
 QLabel[status="online"] {
     color: #8de0b1;
     background-color: #123726;
@@ -89,6 +144,13 @@ QLabel[status="offline"] {
     background-color: #29333f;
     border-radius: 12px;
     padding: 5px 9px;
+}
+
+QLabel[compactStatus="true"] {
+    font-size: 9pt;
+    font-weight: 400;
+    border-radius: 9px;
+    padding: 2px 7px;
 }
 
 QFrame#controllerRow,
@@ -114,6 +176,20 @@ QFrame#controllerConfigGrid {
     background-color: #0a1725;
     border: 1px solid #263b50;
     border-radius: 8px;
+}
+
+QFrame#layoutSettingsGroup {
+    background-color: #0a1725;
+    border: 1px solid #2b4055;
+    border-radius: 8px;
+}
+
+QLabel#layoutGroupTitle {
+    color: #8fcdf8;
+    background-color: transparent;
+    border: none;
+    font-size: 10pt;
+    font-weight: 700;
 }
 
 QFrame#sourceBanner {
@@ -214,6 +290,22 @@ QFrame#cameraScreen {
     background-color: #050b12;
     border: 1px solid #31465c;
     border-radius: 7px;
+}
+
+QFrame#layoutPreview {
+    background-color: #08131f;
+    border: 1px solid #31465c;
+    border-radius: 8px;
+}
+
+QLabel#cameraLayoutTile {
+    color: #dce8f5;
+    background-color: #132b40;
+    border: 1px solid #3b6487;
+    border-radius: 7px;
+    padding: 6px;
+    font-size: 11px;
+    font-weight: 600;
 }
 
 QLabel#cameraPlaceholder {
@@ -358,6 +450,33 @@ QWidget#trafficConfigPage QPushButton[trafficAction="true"]:disabled:pressed {
     font-weight: 500;
 }
 
+QWidget#systemSettingsPage QPushButton[systemAction="true"] {
+    color: #ffffff;
+    background-color: #287fc1;
+    border-color: #55a9e3;
+    font-weight: 600;
+}
+
+QWidget#systemSettingsPage QPushButton[systemAction="true"]:hover {
+    background-color: #3598dc;
+    border-color: #76c0ef;
+}
+
+QWidget#systemSettingsPage QPushButton[systemAction="true"]:pressed {
+    background-color: #1d68a0;
+    border-color: #3d8bc3;
+}
+
+QWidget#systemSettingsPage QPushButton[systemAction="true"][actionRole="confirm"] {
+    background-color: #238b5d;
+    border-color: #55c68a;
+}
+
+QWidget#systemSettingsPage QPushButton[systemAction="true"][actionRole="confirm"]:hover {
+    background-color: #2da66f;
+    border-color: #7cdaa5;
+}
+
 QPushButton#alarmButton {
     min-height: 28px;
     padding: 3px 10px;
@@ -382,6 +501,26 @@ QPushButton#alarmButton[severity="critical"] {
     color: #ffd7da;
     background-color: #5a252b;
     border-color: #a34b55;
+}
+
+QPushButton#sidebarToggleButton {
+    min-height: 38px;
+    max-height: 38px;
+    min-width: 38px;
+    max-width: 38px;
+    padding: 0px;
+    color: #dce8f5;
+    background-color: #15283a;
+    border: 1px solid #38506a;
+    border-radius: 7px;
+    font-size: 20px;
+    font-weight: 500;
+}
+
+QPushButton#sidebarToggleButton:hover {
+    color: #ffffff;
+    background-color: #287fc1;
+    border-color: #55a9e3;
 }
 
 QPushButton#navButton {
@@ -421,6 +560,14 @@ QLineEdit, QComboBox, QSpinBox, QDateEdit, QTimeEdit {
     selection-background-color: #1766a8;
 }
 
+QSpinBox#cameraGridSpin {
+    min-height: 0px;
+    max-height: 24px;
+    padding: 0px 12px 0px 3px;
+    border-radius: 4px;
+    font-size: 9pt;
+}
+
 QComboBox QAbstractItemView {
     color: #edf5ff;
     background-color: #101e2e;
@@ -445,7 +592,8 @@ QTableWidget#configTable::item {
     padding: 5px;
 }
 
-QTabWidget#trafficConfigTabs::pane {
+QTabWidget#trafficConfigTabs::pane,
+QTabWidget#systemSettingsTabs::pane {
     background-color: #0a1624;
     border: 1px solid #2a3d52;
     border-radius: 8px;
@@ -533,7 +681,10 @@ QPushButton#compactButton:disabled:hover,
 QPushButton#compactButton:disabled:pressed,
 QWidget#trafficConfigPage QPushButton[trafficAction="true"]:disabled,
 QWidget#trafficConfigPage QPushButton[trafficAction="true"]:disabled:hover,
-QWidget#trafficConfigPage QPushButton[trafficAction="true"]:disabled:pressed {
+QWidget#trafficConfigPage QPushButton[trafficAction="true"]:disabled:pressed,
+QWidget#systemSettingsPage QPushButton[systemAction="true"]:disabled,
+QWidget#systemSettingsPage QPushButton[systemAction="true"]:disabled:hover,
+QWidget#systemSettingsPage QPushButton[systemAction="true"]:disabled:pressed {
     color: #87919c;
     background-color: #343b43;
     border-color: #4b545e;

@@ -212,8 +212,9 @@ class CameraConfigView(QWidget):
         if not snapshot:
             return
         self.current_controller_id = controller_id
+        enabled_count = sum(camera.enabled for camera in snapshot.cameras)
         self.subtitle.setText(
-            f"{snapshot.name} · {snapshot.active_signal_groups} SG + 1 PTZ"
+            f"{snapshot.name} · {enabled_count}/{len(snapshot.cameras)} cameras enabled · PTZ optional"
         )
         self._clear_camera_buttons()
         group = QButtonGroup(self)

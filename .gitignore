@@ -13,3 +13,4 @@ command_center_data/*.tmp
 # Local runtime configuration
 command_center_data/cameras.json
 command_center_data/controllers.json
+command_center_data/display_layouts.json

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Callable
 from urllib.parse import urlencode
 
-from PySide6.QtCore import QByteArray, QObject, QTimer, QUrl, Signal
+from PySide6.QtCore import QByteArray, QObject, QUrl, Signal
 from PySide6.QtNetwork import (
     QNetworkAccessManager,
     QNetworkReply,
@@ -340,110 +340,76 @@ class TrafficConfigService(QObject):
 
     def load_initial(self, controller_id: str) -> None:
         self.cancel()
-        if self.controller_service.is_live:
-            self._enqueue(
-                controller_id,
-                "status",
-                "/api/editor/status",
-                parse_editor_status,
-            )
-            self._enqueue(
-                controller_id,
-                "system",
-                "/api/editor/system",
-                parse_system_config,
-            )
-            self._enqueue(
-                controller_id,
-                "plans",
-                "/api/editor/plans",
-                parse_plans_index,
-            )
-            self._start_next()
-        else:
-            self._load_mock_initial(controller_id)
+        self._enqueue(
+            controller_id,
+            "status",
+            "/api/editor/status",
+            parse_editor_status,
+        )
+        self._enqueue(
+            controller_id,
+            "system",
+            "/api/editor/system",
+            parse_system_config,
+        )
+        self._enqueue(
+            controller_id,
+            "plans",
+            "/api/editor/plans",
+            parse_plans_index,
+        )
+        self._start_next()
 
     def load_status(self, controller_id: str) -> None:
-        if self.controller_service.is_live:
-            self._enqueue(
-                controller_id,
-                "status",
-                "/api/editor/status",
-                parse_editor_status,
-            )
-            self._start_next()
+        self._enqueue(
+            controller_id,
+            "status",
+            "/api/editor/status",
+            parse_editor_status,
+        )
+        self._start_next()
 
     def load_plans(self, controller_id: str) -> None:
-        if self.controller_service.is_live:
-            self._enqueue(
-                controller_id,
-                "plans",
-                "/api/editor/plans",
-                parse_plans_index,
-            )
-            self._start_next()
+        self._enqueue(
+            controller_id,
+            "plans",
+            "/api/editor/plans",
+            parse_plans_index,
+        )
+        self._start_next()
 
     def load_plan(self, controller_id: str, plan_number: int) -> None:
         if not 1 <= plan_number <= 24:
             return
-        if self.controller_service.is_live:
-            self._drop_queued(controller_id, "plan-")
-            self._enqueue(
-                controller_id,
-                f"plan-{plan_number}",
-                f"/api/editor/plan?plan={plan_number}",
-                parse_plan,
-            )
-            self._start_next()
-        else:
-            QTimer.singleShot(
-                0,
-                lambda: self.plan_loaded.emit(
-                    controller_id,
-                    plan_number,
-                    _mock_plan(plan_number),
-                ),
-            )
+        self._drop_queued(controller_id, "plan-")
+        self._enqueue(
+            controller_id,
+            f"plan-{plan_number}",
+            f"/api/editor/plan?plan={plan_number}",
+            parse_plan,
+        )
+        self._start_next()
 
     def load_schedule(self, controller_id: str, day: int) -> None:
         if not 0 <= day <= 7:
             return
-        if self.controller_service.is_live:
-            self._drop_queued(controller_id, "schedule-")
-            self._enqueue(
-                controller_id,
-                f"schedule-{day}",
-                f"/api/editor/schedule?day={day}",
-                parse_schedule,
-            )
-            self._start_next()
-        else:
-            QTimer.singleShot(
-                0,
-                lambda: self.schedule_loaded.emit(
-                    controller_id,
-                    day,
-                    _mock_schedule(day),
-                ),
-            )
+        self._drop_queued(controller_id, "schedule-")
+        self._enqueue(
+            controller_id,
+            f"schedule-{day}",
+            f"/api/editor/schedule?day={day}",
+            parse_schedule,
+        )
+        self._start_next()
 
     def load_holidays(self, controller_id: str) -> None:
-        if self.controller_service.is_live:
-            self._enqueue(
-                controller_id,
-                "holidays",
-                "/api/editor/holidays",
-                parse_holidays,
-            )
-            self._start_next()
-        else:
-            QTimer.singleShot(
-                0,
-                lambda: self.holidays_loaded.emit(
-                    controller_id,
-                    _mock_holidays(),
-                ),
-            )
+        self._enqueue(
+            controller_id,
+            "holidays",
+            "/api/editor/holidays",
+            parse_holidays,
+        )
+        self._start_next()
 
     def begin_edit(self, controller_id: str) -> None:
         self._enqueue_action(controller_id, "start", "/api/editor/start")
@@ -578,29 +544,6 @@ class TrafficConfigService(QObject):
         resource: str,
         endpoint: str,
     ) -> None:
-        if not self.controller_service.is_live:
-            result = EditorActionResult(
-                ok=False,
-                action=resource.upper(),
-                message="Perubahan konfigurasi hanya tersedia dalam LIVE API.",
-                editing=False,
-                modified=False,
-                config_dirty=False,
-                config_revision=0,
-                runtime_revision=0,
-                validation_checked=False,
-                validation_valid=False,
-                error=EditorError(),
-            )
-            QTimer.singleShot(
-                0,
-                lambda: self.action_completed.emit(
-                    controller_id,
-                    resource,
-                    result,
-                ),
-            )
-            return
         self._enqueue(
             controller_id,
             f"action:{resource}",
@@ -672,7 +615,7 @@ class TrafficConfigService(QObject):
         self.busy_changed.emit(True)
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.03")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
         request.setTransferTimeout(3500)
         reply = (
             self._network.post(request, QByteArray())
@@ -772,98 +715,6 @@ class TrafficConfigService(QObject):
                 resource.split(":", 1)[1],
                 result,
             )
-
-    def _load_mock_initial(self, controller_id: str) -> None:
-        status = TrafficEditorStatus(
-            editing=False,
-            modified=False,
-            validation_checked=False,
-            validation_valid=False,
-            config_dirty=False,
-            config_revision=12,
-            runtime_revision=12,
-            apply_state="IDLE",
-            apply_busy=False,
-            safety="OK",
-            active_sg=4,
-            plan_count=4,
-            schedule_count=24,
-            holiday_count=3,
-            conflict_count=2,
-        )
-        system = TrafficSystemConfig(
-            editing=False,
-            source="MOCK DATA",
-            active_sg=4,
-            sg_names=["North", "East", "South", "West"] + [""] * 8,
-        )
-        plans = PlansIndex(
-            editing=False,
-            source="MOCK DATA",
-            plans=[
-                PlanSummary(number=index, stage_count=4 if index <= 4 else 0)
-                for index in range(1, 25)
-            ],
-        )
-        QTimer.singleShot(0, lambda: self.status_loaded.emit(controller_id, status))
-        QTimer.singleShot(0, lambda: self.system_loaded.emit(controller_id, system))
-        QTimer.singleShot(0, lambda: self.plans_loaded.emit(controller_id, plans))
-
-
-def _mock_plan(plan_number: int) -> PlanConfig:
-    stages: list[StageConfig] = []
-    if plan_number <= 4:
-        patterns = (
-            [3, 1, 1, 1],
-            [2, 1, 1, 1],
-            [1, 1, 3, 1],
-            [1, 1, 2, 1],
-        )
-        stages = [
-            StageConfig(
-                number=index + 1,
-                duration_seconds=(35, 4, 30, 4)[index],
-                signal_states=pattern + [0] * 8,
-            )
-            for index, pattern in enumerate(patterns)
-        ]
-    return PlanConfig(False, "MOCK DATA", plan_number, stages)
-
-
-def _mock_schedule(day: int) -> ScheduleDayConfig:
-    day_names = (
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Holiday",
-    )
-    defined = [
-        ScheduleEntryConfig(1, 3, 0, 0),
-        ScheduleEntryConfig(2, 1, 6, 0),
-        ScheduleEntryConfig(3, 2, 16, 0),
-        ScheduleEntryConfig(4, 3, 22, 0),
-    ]
-    entries = defined + [
-        ScheduleEntryConfig(slot, 0, 0, 0) for slot in range(5, 25)
-    ]
-    return ScheduleDayConfig(False, "MOCK DATA", day, day_names[day], entries)
-
-
-def _mock_holidays() -> HolidaysConfig:
-    dates = ((17, 8, 2026), (25, 12, 2026), (1, 1, 2027))
-    entries = [
-        HolidayConfig(index + 1, day, month, year)
-        for index, (day, month, year) in enumerate(dates)
-    ]
-    entries.extend(
-        HolidayConfig(slot, 0, 0, 0) for slot in range(4, 33)
-    )
-    return HolidaysConfig(False, "MOCK DATA", entries)
-
 
 def _require_ok(payload: dict[str, Any]) -> None:
     if payload.get("ok") is False:

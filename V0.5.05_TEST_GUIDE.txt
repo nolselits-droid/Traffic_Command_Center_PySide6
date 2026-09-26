@@ -1,0 +1,110 @@
+TRAFFIC COMMAND CENTER V0.5.05 TEST
+FLEXIBLE INTERSECTION DIAGRAM & CAMERA LAYOUT
+============================================================
+
+Status
+------
+V0.5.05 adalah test build. Jangan merge ke develop atau membuat tag stable
+sebelum seluruh pengujian visual dan hardware berikut selesai.
+
+Tidak ada perubahan firmware ESP32-S3. Semua setting layout disimpan lokal
+per controller pada PC Command Center.
+
+
+A. UJI KOMPATIBILITAS DEFAULT
+-----------------------------
+1. Jalankan aplikasi tanpa file command_center_data/display_layouts.json.
+2. Buka LIVE VIEW.
+3. Pastikan diagram default tetap Four-Way Intersection.
+4. Pastikan PTZ/overview berada sebagai kamera utama jika enabled.
+5. Pastikan seluruh kamera SG enabled tetap tampil.
+6. Pastikan diagram, video, tombol traffic control, status revision, dan
+   flashing SG tetap berfungsi seperti V0.5.04 FIX2.
+
+
+B. UJI INTERSECTION DIAGRAM
+---------------------------
+1. Buka SYSTEM SETTINGS -> LIVE VIEW LAYOUT.
+2. Pilih satu controller.
+3. Uji seluruh Diagram Type:
+   - Four-Way Intersection
+   - T-Junction
+   - Straight Road
+   - Single Approach
+4. Untuk setiap template, uji Rotation 0, 90, 180, dan 270 derajat.
+5. Drag setiap indikator SG ke posisi berbeda pada preview.
+6. Tekan SAVE INTERSECTION LAYOUT.
+7. Buka LIVE VIEW dan pastikan bentuk jalan, rotation, dan posisi SG sama
+   dengan preview.
+8. Pindah controller dan pastikan masing-masing controller memiliki setting
+   layout sendiri.
+9. Restart aplikasi dan pastikan setting tetap tersimpan.
+10. Pastikan perubahan layout tidak mengubah Plan, Stage, Schedule, Holiday,
+    output lampu, maupun Safety controller.
+
+
+C. UJI CAMERA AUTO LAYOUT
+-------------------------
+1. Buka CAMERA CONFIGURATION dan tentukan kamera yang enabled.
+2. Buka SYSTEM SETTINGS -> LIVE VIEW LAYOUT.
+3. Pilih Camera Layout Mode = Auto Layout.
+4. Centang hanya kamera yang ingin ditampilkan.
+5. Uji kondisi berikut:
+   - satu kamera saja;
+   - dua kamera SG tanpa PTZ;
+   - tiga kamera SG tanpa PTZ;
+   - empat kamera SG tanpa PTZ;
+   - empat kamera SG + satu PTZ;
+   - hanya kamera PTZ/overview.
+6. Tekan SAVE CAMERA LAYOUT lalu buka LIVE VIEW.
+7. Pastikan tidak ada slot kosong untuk PTZ ketika PTZ tidak ditampilkan.
+8. Uji Primary Camera dan pastikan kamera tersebut menjadi tile besar ketika
+   ada lebih dari satu kamera.
+9. Hide/open sidebar dan pastikan hanya area Live Camera yang bertambah lebar;
+   lebar Intersection Diagram dan Traffic Control tetap stabil.
+10. Pastikan ukuran tile tidak berubah mengikuti resolusi RTSP.
+
+
+D. UJI CAMERA CUSTOM GRID
+-------------------------
+1. Pilih Camera Layout Mode = Custom Grid.
+2. Tekan AUTO ARRANGE CUSTOM GRID sebagai posisi awal.
+3. Drag camera tile pada preview, kemudian atur Row, Column, Width, dan Height
+   pada grid 4 x 4 untuk pemeriksaan posisi yang presisi.
+4. Tekan SAVE CAMERA LAYOUT dan periksa hasilnya di LIVE VIEW.
+5. Buat dua kamera menempati sel yang sama.
+6. Pastikan Save ditolak dengan pesan GRID CONFLICT.
+7. Buat tile melewati batas row/column grid.
+8. Pastikan Save ditolak dengan pesan INVALID GRID.
+9. Nonaktifkan visibility kamera PTZ dan pastikan stream PTZ tidak dibuka di
+   LIVE VIEW.
+10. Restart aplikasi dan pastikan Custom Grid tetap tersimpan.
+
+
+E. UJI KONDISI OFFLINE
+----------------------
+1. Lepas kabel LAN controller.
+2. Buka SYSTEM SETTINGS -> LIVE VIEW LAYOUT.
+3. Pastikan layout lokal tetap dapat dilihat, diubah, dan disimpan.
+4. Pastikan tab system controller lainnya tetap mengikuti guard offline.
+5. Sambungkan LAN kembali dan pastikan Live View memakai layout yang disimpan.
+
+
+F. UJI REGRESI
+--------------
+1. OVERVIEW: SG dan status controller tetap normal.
+2. LIVE VIEW: SKIP, HOLD, FLASHING, revision, dan flashing animation normal.
+3. CAMERA CONFIGURATION: Test Connection, Preview, Save Camera normal.
+4. TRAFFIC CONFIGURATION: Draft, Validate, Save, Safe Apply, Cancel normal.
+5. BACKUP & RESTORE: Download, Validate, dan Restore normal.
+6. SYSTEM SETTINGS: identity, operational, startup, SG names, RTC normal.
+7. ALARMS & EVENTS: communication dan camera alarms normal.
+
+
+HASIL YANG DIHARAPKAN
+---------------------
+- Layout tersimpan per controller di command_center_data/display_layouts.json.
+- File tersebut tidak menyimpan password kamera.
+- Layout tidak dikirim ke ESP32-S3 dan tidak mempengaruhi traffic runtime.
+- Hanya kamera enabled + visible yang membuka stream pada LIVE VIEW.
+- Kamera PTZ/dome sepenuhnya opsional.

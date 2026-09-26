@@ -59,9 +59,6 @@ class BackupRestoreService(QObject):
         if self._reply is not None or self._action:
             self.failed.emit(controller_id, action, "Proses Backup/Restore lain masih berjalan.")
             return
-        if not self.controller_service.is_live:
-            self.failed.emit(controller_id, action, "Backup & Restore hanya tersedia pada LIVE API.")
-            return
         base_url = self.controller_service.base_url(controller_id)
         if not base_url:
             self.failed.emit(controller_id, action, "Base URL controller tidak tersedia.")
@@ -100,7 +97,7 @@ class BackupRestoreService(QObject):
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
         request.setRawHeader(b"Connection", b"close")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.03")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
         if content_type:
             request.setRawHeader(b"Content-Type", content_type)
         request.setTransferTimeout(12000)

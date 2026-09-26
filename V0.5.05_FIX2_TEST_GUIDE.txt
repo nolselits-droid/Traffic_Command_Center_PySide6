@@ -1,0 +1,93 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX2 TEST
+SPLIT LAYOUT, CONSISTENT SG POSITION & LEFT-LANE FLOW
+============================================================
+
+A. TAB SYSTEM SETTINGS
+----------------------
+1. Buka SYSTEM SETTINGS.
+2. Pastikan tersedia dua tab terpisah:
+   - INTERSECTION LAYOUT
+   - CAMERA LAYOUT
+3. Pastikan Camera Layout tetap memiliki Auto Layout, Custom Grid, Primary
+   Camera, visibility, drag tile, serta setting Row/Column/Width/Height.
+4. Pastikan perubahan Intersection Layout tidak menimpa Camera Layout.
+5. Pastikan perubahan Camera Layout tidak menimpa Intersection Layout.
+
+
+B. KONSISTENSI POSISI SG
+------------------------
+1. Buka INTERSECTION LAYOUT.
+2. Pilih setiap template dan rotation.
+3. Drag SG ke beberapa posisi yang mudah dikenali.
+4. Tekan SAVE INTERSECTION LAYOUT.
+5. Buka LIVE VIEW dan bandingkan pusat posisi setiap SG.
+6. Pastikan posisi relatif terhadap jalan sama dan tidak bergeser.
+7. Ulangi saat sidebar OPEN dan HIDDEN.
+8. Ulangi pada resolusi 1920x1080 dan 1366x768 bila tersedia.
+9. Pastikan perbedaan ukuran panel hanya mengubah skala, bukan posisi relatif.
+
+
+C. KOMBINASI VEHICLE MOVEMENT
+-----------------------------
+1. Pilih satu SG.
+2. Uji checkbox secara terpisah dan kombinasi:
+   - Straight
+   - Left
+   - Right
+   - Straight + Left
+   - Straight + Right
+   - Left + Right
+   - Straight + Left + Right
+3. Pastikan setiap checkbox menghasilkan garis dan panah masing-masing.
+4. Coba kosongkan seluruh checkbox dan pastikan Straight otomatis kembali
+   aktif sehingga konfigurasi movement tidak kosong.
+5. Save, restart aplikasi, lalu pastikan seluruh kombinasi tetap tersimpan.
+
+
+D. FLOW DIRECTION DAN LAJUR KIRI
+--------------------------------
+1. Pilih Flow Direction = Inbound.
+2. Pastikan hanya satu garis menuju intersection pada lajur kiri.
+3. Pilih Outbound dan pastikan garis keluar berada pada lajur kiri sesuai arah
+   perjalanan kendaraan.
+4. Pilih Two-Way.
+5. Pastikan terdapat dua garis terpisah, bukan satu garis di tengah jalan.
+6. Pastikan masing-masing garis berada di tengah lajur kiri untuk arah
+   perjalanannya.
+7. Pastikan arah panah kedua garis saling berlawanan.
+8. Pilih Hidden dan pastikan hanya garis/panah yang hilang; gambar SG tetap ada.
+9. Pastikan flow hanya berupa garis tipis dan ujung panah, tanpa blok warna pada
+   area jalan.
+
+
+E. WARNA DAN FLASHING
+---------------------
+1. GREEN: garis hijau.
+2. YELLOW: garis kuning.
+3. RED: garis merah redup.
+4. FLASH YELLOW 500: garis ikut berkedip 500 ms.
+5. FLASH YELLOW 1000: garis ikut berkedip 1000 ms.
+6. Pastikan warna tidak memenuhi atau memblok area jalan.
+
+
+F. MIGRASI FIX1
+---------------
+1. Gunakan display_layouts.json dari V0.5.05 FIX1.
+2. Pastikan posisi, rotasi SG, flow direction, dan camera layout tetap terbaca.
+3. Pastikan movement lama dimigrasikan:
+   - Straight -> Straight
+   - Left -> Left
+   - Right -> Right
+   - Straight + Left -> checkbox Straight dan Left
+   - Straight + Right -> checkbox Straight dan Right
+4. Simpan ulang dan restart aplikasi.
+5. Pastikan file hasil FIX2 tetap dapat dimuat tanpa error.
+
+
+G. REGRESI
+----------
+1. Camera stream, fullscreen, retry, dan Camera Configuration normal.
+2. Intersection Diagram pada LIVE VIEW tetap stabil saat sidebar hide/open.
+3. SKIP, HOLD, FLASHING, revision, alarm, dan traffic configuration normal.
+4. Perubahan layout tidak mengirim konfigurasi ke ESP32-S3.
+5. Setiap controller tetap memiliki layout masing-masing.

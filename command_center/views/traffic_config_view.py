@@ -679,7 +679,7 @@ class TrafficConfigView(QWidget):
         if manual:
             self._record_audit(
                 "Traffic configuration refresh requested",
-                "Manual refresh from Command Center V0.5.03",
+                "Manual refresh from Command Center V0.5.05 FIX7 TEST",
             )
         self.config_service.load_initial(self.current_controller_id)
 
@@ -1496,9 +1496,7 @@ class TrafficConfigView(QWidget):
     def _update_controls(self) -> None:
         status = self.current_status
         snapshot = self.controller_service.get_controller(self.current_controller_id)
-        live_online = bool(
-            self.controller_service.is_live and snapshot and snapshot.online
-        )
+        live_online = bool(snapshot and snapshot.online)
         owns = self._owns_current_draft()
         editing = bool(status and status.editing)
         can_edit = bool(owns and editing and live_online and not self._busy)
@@ -1560,10 +1558,8 @@ class TrafficConfigView(QWidget):
             mode_text, mode_status = "EDITING DRAFT", "warning"
         elif editing:
             mode_text, mode_status = "EXTERNAL DRAFT", "warning"
-        elif self.controller_service.is_live:
-            mode_text, mode_status = "VIEW MODE", "online"
         else:
-            mode_text, mode_status = "MOCK · READ-ONLY", "offline"
+            mode_text, mode_status = "VIEW MODE", "online"
         self.mode_label.setText(mode_text)
         self.mode_label.setProperty("status", mode_status)
         self.mode_label.style().unpolish(self.mode_label)
@@ -1579,7 +1575,6 @@ class TrafficConfigView(QWidget):
             self._owns_current_draft()
             and self.current_status
             and self.current_status.editing
-            and self.controller_service.is_live
             and snapshot
             and snapshot.online
             and not self._busy
@@ -1594,7 +1589,6 @@ class TrafficConfigView(QWidget):
         snapshot = self.controller_service.get_controller(self.current_controller_id)
         return bool(
             status
-            and self.controller_service.is_live
             and snapshot
             and snapshot.online
             and not self._busy

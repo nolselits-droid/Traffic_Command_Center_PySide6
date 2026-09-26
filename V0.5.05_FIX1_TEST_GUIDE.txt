@@ -1,0 +1,86 @@
+TRAFFIC COMMAND CENTER V0.5.05 FIX1 TEST
+SG ROTATION & VEHICLE FLOW TEST GUIDE
+============================================================
+
+Gunakan panduan V0.5.05_TEST_GUIDE.txt untuk pengujian template intersection
+dan camera layout. FIX1 menambahkan pengujian berikut.
+
+
+A. MIGRASI SETTING V0.5.05
+--------------------------
+1. Jalankan FIX1 menggunakan display_layouts.json yang dibuat V0.5.05 TEST.
+2. Pastikan bentuk jalan, rotation, posisi SG, dan camera layout lama tetap ada.
+3. Pastikan SG lama mendapat default:
+   - SG Rotation: Auto
+   - Vehicle Movement: Straight
+   - Flow Direction: Inbound
+4. Pastikan tidak ada error saat membuka LIVE VIEW LAYOUT maupun LIVE VIEW.
+
+
+B. ROTASI LAMPU SG
+-------------------
+1. Buka SYSTEM SETTINGS -> LIVE VIEW LAYOUT.
+2. Pilih SG dari daftar Selected SG.
+3. Uji SG Rotation: Auto, 0, 90, 180, dan 270 derajat.
+4. Pastikan hanya gambar lampu SG terpilih yang berputar.
+5. Klik SG lain langsung pada preview dan pastikan Selected SG ikut berubah.
+6. Drag SG yang sudah dirotasi, kemudian Save dan restart aplikasi.
+7. Pastikan posisi dan rotasi tetap tersimpan.
+8. Pada Auto, pastikan SG sisi Utara/Selatan tampil horizontal dan SG sisi
+   Timur/Barat otomatis tampil vertikal.
+
+
+C. GARIS PERGERAKAN KENDARAAN
+-----------------------------
+1. Uji Vehicle Movement satu per satu:
+   - Straight
+   - Left Turn
+   - Right Turn
+   - Straight + Left
+   - Straight + Right
+2. Pastikan garis dan ujung panah sesuai gerakan yang dipilih.
+3. Uji Flow Direction:
+   - Inbound to Intersection
+   - Outbound from Intersection
+   - Two-Way
+   - Hidden
+4. Pastikan Hidden menghilangkan garis tanpa menyembunyikan gambar SG.
+5. Pastikan Two-Way menampilkan ujung panah pada kedua arah.
+6. Tekan SAVE INTERSECTION LAYOUT dan periksa hasil yang sama di LIVE VIEW.
+
+
+D. WARNA RUNTIME
+----------------
+1. Saat SG GREEN, pastikan garis terkait berwarna hijau.
+2. Saat SG YELLOW, pastikan garis terkait berwarna kuning.
+3. Saat SG RED, pastikan garis berwarna merah redup.
+4. Saat FLASH YELLOW 500 ms, pastikan garis ikut berkedip 500 ms.
+5. Saat FLASH YELLOW 1000 ms, pastikan garis ikut berkedip 1000 ms.
+6. Pastikan SG lain tidak mengikuti warna SG yang sedang berubah.
+
+
+E. TEMPLATE DAN ROTASI JALAN
+----------------------------
+1. Atur rotasi/movement/flow beberapa SG.
+2. Ganti Diagram Type atau Rotation jalan.
+3. Pastikan posisi SG kembali mengikuti template baru.
+4. Pastikan rotasi individual, movement, dan flow SG tidak terhapus.
+5. Tekan RESET SG POSITIONS dan pastikan hanya posisi yang direset; pengaturan
+   visual tiap SG tetap dipertahankan.
+
+
+F. REGRESI KESELAMATAN
+----------------------
+1. Pastikan perubahan diagram tidak mengirim request ke ESP32-S3.
+2. Pastikan Plan, Stage, Schedule, Holiday, Safety, dan output SG tidak berubah.
+3. Pastikan SKIP, HOLD, FLASHING, kamera, dan Config/Runtime Revision normal.
+4. Pastikan setting tetap terpisah untuk setiap controller.
+5. Pastikan diagram dapat diedit ketika controller offline.
+
+
+HASIL YANG DIHARAPKAN
+---------------------
+- Rotasi lampu dan arah kendaraan tersimpan di display_layouts.json.
+- Data lama V0.5.05 tetap kompatibel.
+- Diagram hanya merupakan visualisasi Command Center.
+- Tidak ada perubahan firmware ESP32-S3.

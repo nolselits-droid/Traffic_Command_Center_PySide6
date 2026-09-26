@@ -1,0 +1,80 @@
+TRAFFIC COMMAND CENTER V0.6.00 TEST
+===================================
+
+TUJUAN UPDATE
+-------------
+Menambahkan model Intersection Layout berbasis road arm agar Command Center
+dapat menggambar simpang lima dan beberapa SG pada satu lengan jalan.
+
+FITUR BARU
+----------
+1. Diagram Type baru: Five-Way Intersection.
+2. Maksimal lima road arm dan tetap maksimal dua belas SG.
+3. Setiap road arm memiliki:
+   - Nama/nomor arm.
+   - Sudut 0–359 derajat.
+   - One Way - Inbound.
+   - One Way - Outbound.
+   - Two Way.
+   - Hidden.
+4. Setiap SG memiliki:
+   - Assigned Road Arm.
+   - Lane Position 1–4.
+   - SG Rotation.
+   - Satu atau beberapa Destination Arms.
+5. Beberapa SG dapat memakai road arm yang sama dengan lane position berbeda.
+6. Destination Arms diberi keterangan Straight, Slight Left, Left,
+   Slight Right, atau Right berdasarkan geometri road arm.
+7. Posisi visual SG tidak lagi dipakai untuk menebak asal kendaraan.
+8. Flow lampu mengikuti status runtime masing-masing SG.
+
+KOMPATIBILITAS LAYOUT LAMA
+--------------------------
+1. Layout schema ditingkatkan dari versi 1 menjadi versi 2.
+2. Four-Way, T-Junction, Straight Road, dan Single Approach lama tetap dibaca.
+3. SG lama dipetakan ke road arm berdasarkan urutan standar diagram lama.
+4. Beberapa SG pada approach yang sama mendapat Lane Position berurutan.
+5. Road arm hasil migrasi memakai Two Way agar destination flow lama tidak
+   hilang. Operator dapat mengubahnya menjadi One Way bila diperlukan.
+6. File display_layouts.json lama tidak perlu dihapus.
+
+PANDUAN UJI FOUR-WAY MULTI-SG
+-----------------------------
+1. Buka SYSTEM SETTINGS > INTERSECTION LAYOUT.
+2. Pilih Four-Way Intersection.
+3. Pilih SG1 dan set Assigned Road Arm = North, Lane Position = 1.
+4. Pilih destination South dan East untuk Straight + Left.
+5. Pilih SG2 dan set Assigned Road Arm = North, Lane Position = 2.
+6. Pilih destination West untuk Right.
+7. Simpan layout dan buka LIVE VIEW.
+8. Pastikan SG1 dan SG2 berasal dari road arm North tetapi memiliki flow
+   dan warna runtime masing-masing.
+
+PANDUAN UJI FIVE-WAY
+--------------------
+1. Pilih Diagram Type = Five-Way Intersection.
+2. Pastikan lima road arm muncul pada preview.
+3. Pilih setiap road arm dan ubah Arm Angle bila bentuk lapangan tidak simetris.
+4. Atur Flow Direction masing-masing road arm.
+5. Untuk setiap SG, pilih Assigned Road Arm dan Lane Position.
+6. Centang satu atau beberapa Destination Arms.
+7. Geser posisi visual SG bila diperlukan.
+8. Klik SAVE INTERSECTION LAYOUT.
+9. Buka LIVE VIEW dan pastikan bentuk, SG, serta flow sama dengan preview.
+10. Tutup dan jalankan kembali aplikasi; pastikan layout tetap tersimpan.
+
+UJI ONE-WAY
+-----------
+1. Set salah satu arm menjadi One Way - Inbound.
+2. Pastikan arm tersebut dapat menjadi sumber flow tetapi tidak dapat dipilih
+   sebagai destination arm.
+3. Set arm lain menjadi One Way - Outbound.
+4. Pastikan arm tersebut dapat menjadi destination tetapi tidak menghasilkan
+   flow inbound dari SG yang ditempatkan pada arm tersebut.
+
+BATASAN V0.6.00 TEST
+--------------------
+1. Intersection Layout masih disimpan lokal pada PC Command Center.
+2. Belum ada API penyimpanan layout pada ESP32-S3.
+3. Belum ada Intersection Diagram pada dashboard web ESP32-S3.
+4. Camera Layout tidak berubah pada versi ini.

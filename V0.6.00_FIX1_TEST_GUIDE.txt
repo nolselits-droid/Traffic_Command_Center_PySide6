@@ -1,0 +1,40 @@
+TRAFFIC COMMAND CENTER V0.6.00 FIX1 TEST
+========================================
+
+TUJUAN UPDATE
+-------------
+Memperbaiki bentuk garis vehicle flow agar Straight, Left, dan Right tidak
+lagi menggambar bagian inbound penuh secara bertumpuk.
+
+PERUBAHAN
+---------
+1. Setiap SG hanya menggambar satu inbound trunk dari sisi luar road arm.
+2. Movement bercabang setelah kendaraan maju mendekati intersection.
+3. Straight 180 derajat memakai lane offset yang sama pada approach dan exit
+   sehingga garis benar-benar lurus dan sejajar dengan jalan.
+4. Left dimulai lebih dekat ke pusat intersection sebelum berbelok.
+5. Right mulai bercabang sedikit lebih awal di sekitar stop line.
+6. Slight Left dan Slight Right pada Five-Way memakai branch point menengah.
+7. Left/Right memakai cubic Bezier agar awal dan akhir kurva mengikuti arah
+   lajur, bukan membentuk sudut tajam.
+8. Arrowhead hanya digambar pada ujung destination arm.
+9. Multi-SG pada road arm yang sama tetap memakai lane offset berbeda.
+
+PANDUAN UJI
+-----------
+1. Buka SYSTEM SETTINGS > INTERSECTION LAYOUT.
+2. Pilih Four-Way Intersection dan satu SG.
+3. Centang destination Straight, Left, dan Right secara bersamaan.
+4. Pastikan hanya ada satu garis inbound dari sisi luar jalan.
+5. Pastikan Left dan Right baru bercabang mendekati intersection.
+6. Pastikan tidak ada bagian awal yang terlihat lebih tebal akibat overlap.
+7. Pastikan Straight menuju arm berlawanan terlihat benar-benar lurus.
+8. Ulangi dengan dua SG pada road arm yang sama dan Lane Position berbeda.
+9. Pilih Five-Way Intersection dan periksa Slight Left/Slight Right.
+10. Simpan layout lalu buka LIVE VIEW; pastikan bentuk flow sama dengan preview.
+
+BATASAN
+-------
+Update ini hanya mengubah geometri gambar vehicle flow. Model road arm,
+penyimpanan layout, status runtime SG, Camera Layout, dan konfigurasi traffic
+controller tidak berubah.

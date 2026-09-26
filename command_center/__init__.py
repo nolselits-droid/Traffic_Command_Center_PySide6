@@ -1,3 +1,3 @@
 """Traffic Command Center UI skeleton."""
 
-__version__ = "0.5.05-fix7-test"
+__version__ = "0.6.00-fix1-test"

@@ -97,7 +97,7 @@ class BackupRestoreService(QObject):
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
         request.setRawHeader(b"Connection", b"close")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.00-FIX1-TEST")
         if content_type:
             request.setRawHeader(b"Content-Type", content_type)
         request.setTransferTimeout(12000)

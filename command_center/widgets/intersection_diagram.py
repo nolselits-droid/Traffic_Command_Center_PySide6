@@ -18,8 +18,11 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from ..display_layout import (
     IntersectionLayoutConfig,
+    RoadArm,
     SignalPlacement,
+    default_road_arms,
     default_signal_placements,
+    effective_arm_angle,
 )
 from ..models import SignalGroupState
 
@@ -36,8 +39,6 @@ class IntersectionDiagram(QWidget):
         "GREEN": QColor("#42d58b"),
         "OFF": QColor("#344353"),
     }
-    DIRECTION_ORDER = ("NORTH", "EAST", "SOUTH", "WEST")
-
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._signal_groups: list[SignalGroupState] = []
@@ -88,6 +89,11 @@ class IntersectionDiagram(QWidget):
                 placement.rotation = old.rotation
                 placement.movements = list(old.movements)
                 placement.flow_direction = old.flow_direction
+                placement.road_arm_id = old.road_arm_id
+                placement.lane_position = old.lane_position
+                placement.destination_arm_ids = list(
+                    old.destination_arm_ids
+                )
         self._layout.placements = updated
         self.update()
 
@@ -124,18 +130,41 @@ class IntersectionDiagram(QWidget):
         height = canvas.height()
         center_x = width / 2.0
         center_y = height / 2.0
-        road_width = min(width, height) * 0.32
+        road_arms = self._layout.road_arms or default_road_arms(
+            self._layout.diagram_type
+        )
+        road_width = min(width, height) * (
+            0.245 if len(road_arms) >= 5 else 0.32
+        )
         half_road = road_width / 2.0
-
-        directions = self._road_directions()
-        self._draw_roads(
-            painter, directions, center_x, center_y, half_road,
-            road_width, width, height,
+        self._draw_arm_roads(
+            painter,
+            road_arms,
+            center_x,
+            center_y,
+            half_road,
+            road_width,
+            width,
+            height,
         )
-        self._draw_lane_markings(
-            painter, directions, center_x, center_y, half_road, width, height,
+        self._draw_arm_lane_markings(
+            painter,
+            road_arms,
+            center_x,
+            center_y,
+            half_road,
+            road_width,
+            width,
+            height,
         )
-        self._draw_direction_labels(painter, directions, width, height)
+        self._draw_arm_labels(painter, road_arms, width, height)
+        self._draw_outbound_indicators(
+            painter,
+            road_arms,
+            road_width,
+            width,
+            height,
+        )
 
         defaults = default_signal_placements(
             self._layout.diagram_type,
@@ -153,6 +182,7 @@ class IntersectionDiagram(QWidget):
                 signal_group,
                 width,
                 height,
+                road_width,
             )
 
         self._signal_rects.clear()
@@ -173,15 +203,24 @@ class IntersectionDiagram(QWidget):
                 min(height - box_height - 2.0, placement.y * height - box_height / 2),
             )
             rect = QRectF(left, top, box_width, box_height)
-            if self._signal_rotation(placement) in {90, 270}:
+            signal_rotation = self._signal_rotation(placement)
+            if signal_rotation in {90, 270}:
                 hit_rect = QRectF(
                     rect.center().x() - box_height / 2.0,
                     rect.center().y() - box_width / 2.0,
                     box_height,
                     box_width,
                 )
-            else:
+            elif signal_rotation in {0, 180}:
                 hit_rect = rect
+            else:
+                hit_size = max(box_width, box_height)
+                hit_rect = QRectF(
+                    rect.center().x() - hit_size / 2.0,
+                    rect.center().y() - hit_size / 2.0,
+                    hit_size,
+                    hit_size,
+                )
             self._signal_rects[signal_group.number] = hit_rect.translated(
                 canvas.left(),
                 canvas.top(),
@@ -262,27 +301,10 @@ class IntersectionDiagram(QWidget):
             return
         super().mouseReleaseEvent(event)
 
-    def _road_directions(self) -> set[str]:
-        base = {
-            "FOUR_WAY": {"NORTH", "EAST", "SOUTH", "WEST"},
-            "T_JUNCTION": {"NORTH", "EAST", "WEST"},
-            "STRAIGHT_ROAD": {"NORTH", "SOUTH"},
-            "SINGLE_APPROACH": {"NORTH"},
-        }.get(
-            self._layout.diagram_type,
-            {"NORTH", "EAST", "SOUTH", "WEST"},
-        )
-        turns = (self._layout.rotation // 90) % 4
-        rotated: set[str] = set()
-        for direction in base:
-            index = self.DIRECTION_ORDER.index(direction)
-            rotated.add(self.DIRECTION_ORDER[(index + turns) % 4])
-        return rotated
-
-    @staticmethod
-    def _draw_roads(
+    def _draw_arm_roads(
+        self,
         painter: QPainter,
-        directions: set[str],
+        road_arms: dict[str, RoadArm],
         center_x: float,
         center_y: float,
         half_road: float,
@@ -290,63 +312,85 @@ class IntersectionDiagram(QWidget):
         width: float,
         height: float,
     ) -> None:
+        del road_width
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor("#303944"))
-        painter.drawRect(
-            QRectF(
-                center_x - half_road,
-                center_y - half_road,
-                road_width,
-                road_width,
+        center = QPointF(center_x, center_y)
+        distance = max(width, height) * 0.78
+        for arm in road_arms.values():
+            outward, lateral = self._arm_vectors(arm)
+            outer = QPointF(
+                center.x() + outward.x() * distance,
+                center.y() + outward.y() * distance,
             )
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        self._offset_point(center, lateral, -half_road),
+                        self._offset_point(outer, lateral, -half_road),
+                        self._offset_point(outer, lateral, half_road),
+                        self._offset_point(center, lateral, half_road),
+                    ]
+                )
+            )
+        painter.drawEllipse(
+            center,
+            half_road * 1.08,
+            half_road * 1.08,
         )
-        if "NORTH" in directions:
-            painter.drawRect(QRectF(center_x - half_road, 0, road_width, center_y))
-        if "EAST" in directions:
-            painter.drawRect(QRectF(center_x, center_y - half_road, width - center_x, road_width))
-        if "SOUTH" in directions:
-            painter.drawRect(QRectF(center_x - half_road, center_y, road_width, height - center_y))
-        if "WEST" in directions:
-            painter.drawRect(QRectF(0, center_y - half_road, center_x, road_width))
 
-    @staticmethod
-    def _draw_lane_markings(
+    def _draw_arm_lane_markings(
+        self,
         painter: QPainter,
-        directions: set[str],
+        road_arms: dict[str, RoadArm],
         center_x: float,
         center_y: float,
         half_road: float,
+        road_width: float,
         width: float,
         height: float,
     ) -> None:
-        margin = half_road + 8
-        pen = QPen(QColor("#d9c66d"), 2)
-        pen.setStyle(Qt.PenStyle.DashLine)
-        painter.setPen(pen)
-        if "NORTH" in directions:
-            painter.drawLine(QPointF(center_x, 8), QPointF(center_x, center_y - margin))
-        if "EAST" in directions:
-            painter.drawLine(QPointF(center_x + margin, center_y), QPointF(width - 8, center_y))
-        if "SOUTH" in directions:
-            painter.drawLine(QPointF(center_x, center_y + margin), QPointF(center_x, height - 8))
-        if "WEST" in directions:
-            painter.drawLine(QPointF(8, center_y), QPointF(center_x - margin, center_y))
+        del road_width
+        center = QPointF(center_x, center_y)
+        distance = max(width, height) * 0.70
+        dash_pen = QPen(QColor("#d9c66d"), 2)
+        dash_pen.setStyle(Qt.PenStyle.DashLine)
+        stop_pen = QPen(QColor("#edf3f8"), 3)
+        for arm in road_arms.values():
+            outward, lateral = self._arm_vectors(arm)
+            lane_start = self._advance_point(
+                center,
+                outward,
+                half_road + 10.0,
+            )
+            lane_end = self._advance_point(center, outward, distance)
+            painter.setPen(dash_pen)
+            painter.drawLine(lane_start, lane_end)
 
-        painter.setPen(QPen(QColor("#edf3f8"), 3))
-        inset = 6
-        if "NORTH" in directions:
-            painter.drawLine(QPointF(center_x - half_road + inset, center_y - half_road - 5), QPointF(center_x + half_road - inset, center_y - half_road - 5))
-        if "EAST" in directions:
-            painter.drawLine(QPointF(center_x + half_road + 5, center_y - half_road + inset), QPointF(center_x + half_road + 5, center_y + half_road - inset))
-        if "SOUTH" in directions:
-            painter.drawLine(QPointF(center_x - half_road + inset, center_y + half_road + 5), QPointF(center_x + half_road - inset, center_y + half_road + 5))
-        if "WEST" in directions:
-            painter.drawLine(QPointF(center_x - half_road - 5, center_y - half_road + inset), QPointF(center_x - half_road - 5, center_y + half_road - inset))
+            stop_center = self._advance_point(
+                center,
+                outward,
+                half_road + 6.0,
+            )
+            inset = 6.0
+            painter.setPen(stop_pen)
+            painter.drawLine(
+                self._offset_point(
+                    stop_center,
+                    lateral,
+                    -(half_road - inset),
+                ),
+                self._offset_point(
+                    stop_center,
+                    lateral,
+                    half_road - inset,
+                ),
+            )
 
-    @staticmethod
-    def _draw_direction_labels(
+    def _draw_arm_labels(
+        self,
         painter: QPainter,
-        directions: set[str],
+        road_arms: dict[str, RoadArm],
         width: float,
         height: float,
     ) -> None:
@@ -354,15 +398,116 @@ class IntersectionDiagram(QWidget):
         font = QFont("Segoe UI", 8)
         font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(font)
-        labels = {
-            "NORTH": ("NORTH", QRectF(width / 2 - 42, 5, 84, 18)),
-            "EAST": ("EAST", QRectF(width - 76, height / 2 - 25, 68, 18)),
-            "SOUTH": ("SOUTH", QRectF(width / 2 - 42, height - 23, 84, 18)),
-            "WEST": ("WEST", QRectF(8, height / 2 + 8, 68, 18)),
-        }
-        for direction in directions:
-            text, rect = labels[direction]
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+        center = QPointF(width / 2.0, height / 2.0)
+        distance = min(width, height) * 0.43
+        for arm in road_arms.values():
+            outward, _ = self._arm_vectors(arm)
+            point = self._advance_point(center, outward, distance)
+            rect = QRectF(point.x() - 42.0, point.y() - 9.0, 84.0, 18.0)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, arm.name.upper())
+
+    def _draw_outbound_indicators(
+        self,
+        painter: QPainter,
+        road_arms: dict[str, RoadArm],
+        road_width: float,
+        width: float,
+        height: float,
+    ) -> None:
+        color = QColor("#6f879b")
+        color.setAlpha(145)
+        pen = QPen(color, 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        for arm in road_arms.values():
+            if arm.flow_direction not in {"OUTBOUND", "TWO_WAY"}:
+                continue
+            start = self._arm_inner_point(
+                arm,
+                False,
+                width,
+                height,
+                road_width * 0.22,
+            )
+            end = self._arm_edge_point(
+                arm,
+                False,
+                width,
+                height,
+                road_width * 0.22,
+            )
+            path = QPainterPath(start)
+            path.lineTo(end)
+            self._draw_flow_path(painter, path, pen, color)
+
+    def _arm_vectors(self, arm: RoadArm) -> tuple[QPointF, QPointF]:
+        angle = effective_arm_angle(arm, self._layout.rotation) * pi / 180.0
+        outward = QPointF(sin(angle), -cos(angle))
+        lateral = QPointF(cos(angle), sin(angle))
+        return outward, lateral
+
+    @staticmethod
+    def _advance_point(
+        point: QPointF,
+        vector: QPointF,
+        distance: float,
+    ) -> QPointF:
+        return QPointF(
+            point.x() + vector.x() * distance,
+            point.y() + vector.y() * distance,
+        )
+
+    @staticmethod
+    def _offset_point(
+        point: QPointF,
+        vector: QPointF,
+        distance: float,
+    ) -> QPointF:
+        return QPointF(
+            point.x() + vector.x() * distance,
+            point.y() + vector.y() * distance,
+        )
+
+    def _arm_edge_point(
+        self,
+        arm: RoadArm,
+        inbound: bool,
+        width: float,
+        height: float,
+        lane_offset: float,
+    ) -> QPointF:
+        center = QPointF(width / 2.0, height / 2.0)
+        outward, lateral = self._arm_vectors(arm)
+        edge = self._advance_point(
+            center,
+            outward,
+            min(width, height) * 0.44,
+        )
+        return self._offset_point(
+            edge,
+            lateral,
+            lane_offset if inbound else -lane_offset,
+        )
+
+    def _arm_inner_point(
+        self,
+        arm: RoadArm,
+        inbound: bool,
+        width: float,
+        height: float,
+        lane_offset: float,
+    ) -> QPointF:
+        center = QPointF(width / 2.0, height / 2.0)
+        outward, lateral = self._arm_vectors(arm)
+        inner = self._advance_point(
+            center,
+            outward,
+            min(width, height) * 0.075,
+        )
+        return self._offset_point(
+            inner,
+            lateral,
+            lane_offset if inbound else -lane_offset,
+        )
 
     def _draw_vehicle_flow(
         self,
@@ -371,14 +516,18 @@ class IntersectionDiagram(QWidget):
         signal_group: SignalGroupState,
         width: float,
         height: float,
+        road_width: float,
     ) -> None:
-        flow = placement.flow_direction.upper()
-        if flow == "HIDDEN":
+        road_arms = self._layout.road_arms or default_road_arms(
+            self._layout.diagram_type
+        )
+        source = road_arms.get(placement.road_arm_id)
+        if source is None or source.flow_direction not in {"INBOUND", "TWO_WAY"}:
             return
-        approach = self._approach_index(placement)
-        exits = self._movement_exits(approach, placement.movements)
-        center = QPointF(width / 2.0, height / 2.0)
-        lane_offset = min(width, height) * 0.32 * 0.22
+        lane_offset = road_width * min(
+            0.43,
+            0.16 + 0.08 * max(0, placement.lane_position - 1),
+        )
         color = self._flow_color(signal_group.aspect)
         pen = QPen(
             color,
@@ -389,127 +538,173 @@ class IntersectionDiagram(QWidget):
         )
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-
-        if flow in {"INBOUND", "TWO_WAY"}:
-            for exit_direction in exits:
-                inbound = self._route_path(
-                    self._lane_edge_point(
-                        approach,
-                        True,
-                        width,
-                        height,
-                        lane_offset,
-                    ),
-                    self._lane_edge_point(
-                        exit_direction,
-                        False,
-                        width,
-                        height,
-                        lane_offset,
-                    ),
-                    center,
-                    exit_direction == (approach + 2) % 4,
-                )
-                self._draw_flow_path(painter, inbound, pen, color)
-
-        # Outbound describes the opposite lane on this road arm, not a
-        # reversed copy of each selected inbound turn. Drawing it once avoids
-        # Left/Right producing an unwanted reverse-turn flow in Two-Way mode.
-        if flow in {"OUTBOUND", "TWO_WAY"}:
-            outbound = QPainterPath(
-                self._lane_inner_point(
-                    approach,
-                    width,
-                    height,
-                    lane_offset,
-                )
-            )
-            outbound.lineTo(
-                self._lane_edge_point(
-                    approach,
-                    False,
-                    width,
-                    height,
-                    lane_offset,
-                )
-            )
-            self._draw_flow_path(painter, outbound, pen, color)
-
-    @staticmethod
-    def _approach_index(placement: SignalPlacement) -> int:
-        dx = placement.x - 0.5
-        dy = placement.y - 0.5
-        if abs(dx) > abs(dy):
-            return 1 if dx > 0 else 3
-        return 2 if dy > 0 else 0
-
-    @staticmethod
-    def _movement_exits(approach: int, movements: list[str]) -> list[int]:
-        mapping = {
-            "STRAIGHT": (approach + 2) % 4,
-            "LEFT": (approach + 1) % 4,
-            "RIGHT": (approach - 1) % 4,
-        }
-        selected = [
-            mapping[item]
-            for item in ("STRAIGHT", "LEFT", "RIGHT")
-            if item in movements
+        start = self._arm_edge_point(
+            source,
+            True,
+            width,
+            height,
+            lane_offset,
+        )
+        destination_ids = [
+            arm_id
+            for arm_id in placement.destination_arm_ids
+            if arm_id in road_arms and arm_id != source.arm_id
         ]
-        return selected or [mapping["STRAIGHT"]]
+        source_heading = (
+            effective_arm_angle(source, self._layout.rotation) + 180.0
+        ) % 360.0
+        routes: list[tuple[RoadArm, float, float]] = []
+        for arm_id in destination_ids:
+            destination = road_arms[arm_id]
+            if destination.flow_direction not in {"OUTBOUND", "TWO_WAY"}:
+                continue
+            destination_heading = effective_arm_angle(
+                destination,
+                self._layout.rotation,
+            )
+            delta = self._signed_angle(
+                destination_heading - source_heading
+            )
+            magnitude = abs(delta)
+            branch_factor = (
+                0.46
+                if magnitude <= 25.0
+                else 0.54
+                if magnitude < 70.0
+                else 0.48
+                if delta < 0.0
+                else 0.64
+            )
+            routes.append((destination, delta, branch_factor))
+
+        if routes:
+            trunk_factor = min(route[2] for route in routes)
+            trunk_end = self._arm_lane_point(
+                source,
+                width,
+                height,
+                road_width * trunk_factor,
+                lane_offset,
+                True,
+            )
+            trunk = QPainterPath(start)
+            trunk.lineTo(trunk_end)
+            self._draw_flow_segment(painter, trunk, pen)
+
+        for destination, delta, branch_factor in routes:
+            magnitude = abs(delta)
+            straight = magnitude <= 25.0
+            branch_start = self._arm_lane_point(
+                source,
+                width,
+                height,
+                road_width * branch_factor,
+                lane_offset,
+                True,
+            )
+            destination_offset = (
+                lane_offset if straight else road_width * 0.22
+            )
+            end = self._arm_edge_point(
+                destination,
+                False,
+                width,
+                height,
+                destination_offset,
+            )
+            path = (
+                self._straight_branch_path(branch_start, end)
+                if straight
+                else self._turn_branch_path(
+                    branch_start,
+                    end,
+                    source,
+                    destination,
+                    road_width,
+                    width,
+                    height,
+                )
+            )
+            self._draw_flow_path(painter, path, pen, color)
+        if not routes:
+            path = QPainterPath(start)
+            path.lineTo(
+                self._arm_inner_point(
+                    source,
+                    True,
+                    width,
+                    height,
+                    lane_offset,
+                )
+            )
+            self._draw_flow_path(painter, path, pen, color)
 
     @staticmethod
-    def _lane_edge_point(
-        direction: int,
-        inbound: bool,
-        width: float,
-        height: float,
-        offset: float,
-    ) -> QPointF:
-        center_x = width * 0.50
-        center_y = height * 0.50
-        return (
-            QPointF(center_x + (offset if inbound else -offset), height * 0.11)
-            if direction == 0
-            else QPointF(width * 0.89, center_y + (offset if inbound else -offset))
-            if direction == 1
-            else QPointF(center_x + (-offset if inbound else offset), height * 0.89)
-            if direction == 2
-            else QPointF(width * 0.11, center_y + (-offset if inbound else offset))
-        )
+    def _signed_angle(value: float) -> float:
+        return (value + 180.0) % 360.0 - 180.0
 
     @staticmethod
-    def _lane_inner_point(
-        direction: int,
-        width: float,
-        height: float,
-        offset: float,
-    ) -> QPointF:
-        center_x = width * 0.50
-        center_y = height * 0.50
-        inner_distance = min(width, height) * 0.07
-        return (
-            QPointF(center_x - offset, center_y - inner_distance)
-            if direction == 0
-            else QPointF(center_x + inner_distance, center_y - offset)
-            if direction == 1
-            else QPointF(center_x + offset, center_y + inner_distance)
-            if direction == 2
-            else QPointF(center_x - inner_distance, center_y + offset)
-        )
-
-    @staticmethod
-    def _route_path(
+    def _straight_branch_path(
         start: QPointF,
         end: QPointF,
-        center: QPointF,
-        straight: bool,
     ) -> QPainterPath:
         path = QPainterPath(start)
-        if straight:
-            path.lineTo(end)
-        else:
-            path.quadTo(center, end)
+        path.lineTo(end)
         return path
+
+    def _turn_branch_path(
+        self,
+        start: QPointF,
+        end: QPointF,
+        source: RoadArm,
+        destination: RoadArm,
+        road_width: float,
+        width: float,
+        height: float,
+    ) -> QPainterPath:
+        source_outward, _ = self._arm_vectors(source)
+        destination_outward, _ = self._arm_vectors(destination)
+        control_one = self._advance_point(
+            start,
+            source_outward,
+            -road_width * 0.72,
+        )
+        control_two = self._advance_point(
+            end,
+            destination_outward,
+            -min(width, height) * 0.22,
+        )
+        path = QPainterPath(start)
+        path.cubicTo(control_one, control_two, end)
+        return path
+
+    def _arm_lane_point(
+        self,
+        arm: RoadArm,
+        width: float,
+        height: float,
+        distance: float,
+        lane_offset: float,
+        inbound: bool,
+    ) -> QPointF:
+        center = QPointF(width / 2.0, height / 2.0)
+        outward, lateral = self._arm_vectors(arm)
+        point = self._advance_point(center, outward, distance)
+        return self._offset_point(
+            point,
+            lateral,
+            lane_offset if inbound else -lane_offset,
+        )
+
+    @staticmethod
+    def _draw_flow_segment(
+        painter: QPainter,
+        path: QPainterPath,
+        pen: QPen,
+    ) -> None:
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
 
     def _draw_flow_path(
         self,
@@ -572,10 +767,18 @@ class IntersectionDiagram(QWidget):
             )
         return value
 
-    @staticmethod
-    def _signal_rotation(placement: SignalPlacement) -> int:
+    def _signal_rotation(self, placement: SignalPlacement) -> int:
         if placement.rotation in {0, 90, 180, 270}:
             return placement.rotation
+        road_arms = self._layout.road_arms or default_road_arms(
+            self._layout.diagram_type
+        )
+        arm = road_arms.get(placement.road_arm_id)
+        if arm is not None:
+            return int(round(effective_arm_angle(
+                arm,
+                self._layout.rotation,
+            ))) % 360
         return (
             90
             if abs(placement.x - 0.5) > abs(placement.y - 0.5)

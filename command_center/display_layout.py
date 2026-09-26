@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
+from math import atan2, cos, degrees, radians, sin
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ DISPLAY_LAYOUT_PATH = (
 
 INTERSECTION_TYPES = {
     "FOUR_WAY": "Four-Way Intersection",
+    "FIVE_WAY": "Five-Way Intersection",
     "T_JUNCTION": "T-Junction",
     "STRAIGHT_ROAD": "Straight Road",
     "SINGLE_APPROACH": "Single Approach",
@@ -31,11 +33,19 @@ VEHICLE_MOVEMENT_OPTIONS = {
 }
 
 FLOW_DIRECTIONS = {
-    "INBOUND": "One Way → Intersection",
-    "OUTBOUND": "One Way ← Intersection",
+    "INBOUND": "One Way - Inbound",
+    "OUTBOUND": "One Way - Outbound",
     "TWO_WAY": "Two Way",
     "HIDDEN": "Hidden",
 }
+
+
+@dataclass(slots=True)
+class RoadArm:
+    arm_id: str
+    name: str
+    angle: float
+    flow_direction: str = "TWO_WAY"
 
 
 @dataclass(slots=True)
@@ -45,12 +55,16 @@ class SignalPlacement:
     rotation: int = -1
     movements: list[str] = field(default_factory=lambda: ["STRAIGHT"])
     flow_direction: str = "INBOUND"
+    road_arm_id: str = ""
+    lane_position: int = 1
+    destination_arm_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class IntersectionLayoutConfig:
     diagram_type: str = "FOUR_WAY"
     rotation: int = 0
+    road_arms: dict[str, RoadArm] = field(default_factory=dict)
     placements: dict[int, SignalPlacement] = field(default_factory=dict)
 
 
@@ -86,6 +100,150 @@ def _rotate_point(x: float, y: float, rotation: int) -> tuple[float, float]:
     return x, y
 
 
+def default_road_arms(diagram_type: str) -> dict[str, RoadArm]:
+    specifications = {
+        "FOUR_WAY": [
+            ("North", 0.0),
+            ("East", 90.0),
+            ("South", 180.0),
+            ("West", 270.0),
+        ],
+        "FIVE_WAY": [
+            ("Arm 1", 0.0),
+            ("Arm 2", 72.0),
+            ("Arm 3", 144.0),
+            ("Arm 4", 216.0),
+            ("Arm 5", 288.0),
+        ],
+        "T_JUNCTION": [
+            ("North", 0.0),
+            ("East", 90.0),
+            ("West", 270.0),
+        ],
+        "STRAIGHT_ROAD": [
+            ("North", 0.0),
+            ("South", 180.0),
+        ],
+        "SINGLE_APPROACH": [("North", 0.0)],
+    }
+    selected = specifications.get(
+        diagram_type,
+        specifications["FOUR_WAY"],
+    )
+    arms: dict[str, RoadArm] = {}
+    for index, (name, angle) in enumerate(selected, start=1):
+        arm_id = f"ARM{index}"
+        arms[arm_id] = RoadArm(
+            arm_id=arm_id,
+            name=name,
+            angle=angle,
+            flow_direction=(
+                "INBOUND" if diagram_type == "SINGLE_APPROACH" else "TWO_WAY"
+            ),
+        )
+    return arms
+
+
+def effective_arm_angle(arm: RoadArm, rotation: int) -> float:
+    return (float(arm.angle) + float(rotation)) % 360.0
+
+
+def nearest_road_arm_id(
+    x: float,
+    y: float,
+    road_arms: dict[str, RoadArm],
+    rotation: int = 0,
+) -> str:
+    if not road_arms:
+        return ""
+    point_angle = degrees(atan2(x - 0.5, -(y - 0.5))) % 360.0
+    return min(
+        road_arms,
+        key=lambda arm_id: _angle_distance(
+            point_angle,
+            effective_arm_angle(road_arms[arm_id], rotation),
+        ),
+    )
+
+
+def destination_ids_for_movements(
+    source_arm_id: str,
+    movements: list[str],
+    road_arms: dict[str, RoadArm],
+) -> list[str]:
+    source = road_arms.get(source_arm_id)
+    candidates = [
+        arm
+        for arm in road_arms.values()
+        if arm.arm_id != source_arm_id
+    ]
+    if source is None or not candidates:
+        return []
+    targets = {
+        "STRAIGHT": (source.angle + 180.0) % 360.0,
+        "LEFT": (source.angle + 90.0) % 360.0,
+        "RIGHT": (source.angle - 90.0) % 360.0,
+    }
+    result: list[str] = []
+    for movement in ("STRAIGHT", "LEFT", "RIGHT"):
+        if movement not in movements:
+            continue
+        target = min(
+            candidates,
+            key=lambda arm: _angle_distance(arm.angle, targets[movement]),
+        )
+        if target.arm_id not in result:
+            result.append(target.arm_id)
+    if result:
+        return result
+    opposite = min(
+        candidates,
+        key=lambda arm: _angle_distance(
+            arm.angle,
+            (source.angle + 180.0) % 360.0,
+        ),
+    )
+    return [opposite.arm_id]
+
+
+def movement_name_between(source: RoadArm, destination: RoadArm) -> str:
+    inbound_heading = (source.angle + 180.0) % 360.0
+    delta = _signed_angle(destination.angle - inbound_heading)
+    magnitude = abs(delta)
+    if magnitude <= 24.0:
+        return "Straight"
+    if delta < 0:
+        return "Slight Left" if magnitude < 70.0 else "Left"
+    return "Slight Right" if magnitude < 70.0 else "Right"
+
+
+def _angle_distance(first: float, second: float) -> float:
+    return abs(_signed_angle(float(first) - float(second)))
+
+
+def _signed_angle(value: float) -> float:
+    return (float(value) + 180.0) % 360.0 - 180.0
+
+
+def _five_way_points(count: int) -> list[tuple[float, float]]:
+    arms = list(default_road_arms("FIVE_WAY").values())
+    offsets = (0.115, 0.19, 0.04)
+    points: list[tuple[float, float]] = []
+    for index in range(max(0, min(12, count))):
+        arm = arms[index % len(arms)]
+        lane_index = index // len(arms)
+        angle = radians(arm.angle)
+        radial = 0.285
+        tangent = offsets[min(lane_index, len(offsets) - 1)]
+        points.append(
+            (
+                0.5 + sin(angle) * radial + cos(angle) * tangent,
+                0.5 - cos(angle) * radial + sin(angle) * tangent,
+            )
+        )
+    return points
+
+
 def default_signal_placements(
     diagram_type: str,
     rotation: int,
@@ -115,11 +273,30 @@ def default_signal_placements(
             (0.46, 0.46), (0.32, 0.46), (0.18, 0.46), (0.12, 0.60),
         ],
     }
-    points = base_by_type.get(diagram_type, base_by_type["FOUR_WAY"])
+    points = (
+        _five_way_points(count)
+        if diagram_type == "FIVE_WAY"
+        else base_by_type.get(diagram_type, base_by_type["FOUR_WAY"])
+    )
+    road_arms = default_road_arms(diagram_type)
+    arm_order = list(road_arms)
     placements: dict[int, SignalPlacement] = {}
+    lane_counts: dict[str, int] = {}
     for index in range(max(0, min(12, count))):
         x, y = _rotate_point(*points[index], rotation)
-        placements[index + 1] = SignalPlacement(x=x, y=y)
+        arm_id = arm_order[index % len(arm_order)] if arm_order else ""
+        lane_counts[arm_id] = lane_counts.get(arm_id, 0) + 1
+        placements[index + 1] = SignalPlacement(
+            x=x,
+            y=y,
+            road_arm_id=arm_id,
+            lane_position=lane_counts[arm_id],
+            destination_arm_ids=destination_ids_for_movements(
+                arm_id,
+                ["STRAIGHT"],
+                road_arms,
+            ),
+        )
     return placements
 
 
@@ -189,6 +366,10 @@ class DisplayLayoutRepository(QObject):
             if layout.intersection.rotation in {0, 90, 180, 270}
             else 0
         )
+        if not layout.intersection.road_arms:
+            layout.intersection.road_arms = default_road_arms(
+                layout.intersection.diagram_type
+            )
         defaults = default_signal_placements(
             layout.intersection.diagram_type,
             layout.intersection.rotation,
@@ -202,6 +383,30 @@ class DisplayLayoutRepository(QObject):
             for number, placement in layout.intersection.placements.items()
             if 1 <= number <= max(1, active_signal_groups)
         }
+        for placement in layout.intersection.placements.values():
+            if placement.road_arm_id not in layout.intersection.road_arms:
+                placement.road_arm_id = nearest_road_arm_id(
+                    placement.x,
+                    placement.y,
+                    layout.intersection.road_arms,
+                    layout.intersection.rotation,
+                )
+            placement.lane_position = max(
+                1,
+                min(4, int(placement.lane_position)),
+            )
+            placement.destination_arm_ids = [
+                arm_id
+                for arm_id in placement.destination_arm_ids
+                if arm_id in layout.intersection.road_arms
+                and arm_id != placement.road_arm_id
+            ]
+            if not placement.destination_arm_ids:
+                placement.destination_arm_ids = destination_ids_for_movements(
+                    placement.road_arm_id,
+                    placement.movements,
+                    layout.intersection.road_arms,
+                )
 
         for order, camera in enumerate(cameras):
             layout.cameras.tiles.setdefault(
@@ -232,7 +437,7 @@ class DisplayLayoutRepository(QObject):
         temporary = DISPLAY_LAYOUT_PATH.with_suffix(".tmp")
         temporary.write_text(
             json.dumps(
-                {"schemaVersion": 1, "controllers": self._records},
+                {"schemaVersion": 2, "controllers": self._records},
                 indent=2,
                 ensure_ascii=False,
             )
@@ -261,7 +466,38 @@ class DisplayLayoutRepository(QObject):
             rotation = int(intersection_raw.get("rotation", 0) or 0)
         except (TypeError, ValueError):
             rotation = 0
+        diagram_type = str(
+            intersection_raw.get("diagram_type", "FOUR_WAY")
+        )
+        if diagram_type not in INTERSECTION_TYPES:
+            diagram_type = "FOUR_WAY"
+        road_arms: dict[str, RoadArm] = {}
+        raw_road_arms = intersection_raw.get("road_arms", {})
+        if isinstance(raw_road_arms, dict):
+            for key, value in raw_road_arms.items():
+                if not isinstance(value, dict):
+                    continue
+                arm_id = str(value.get("arm_id", key) or key).upper()
+                try:
+                    angle = float(value.get("angle", 0.0)) % 360.0
+                except (TypeError, ValueError):
+                    angle = 0.0
+                flow_direction = str(
+                    value.get("flow_direction", "TWO_WAY")
+                ).upper()
+                if flow_direction not in FLOW_DIRECTIONS:
+                    flow_direction = "TWO_WAY"
+                if arm_id and len(road_arms) < 5:
+                    road_arms[arm_id] = RoadArm(
+                        arm_id=arm_id,
+                        name=str(value.get("name", arm_id) or arm_id),
+                        angle=angle,
+                        flow_direction=flow_direction,
+                    )
+        if not road_arms:
+            road_arms = default_road_arms(diagram_type)
         placements: dict[int, SignalPlacement] = {}
+        legacy_lane_counts: dict[str, int] = {}
         raw_placements = intersection_raw.get("placements", {})
         if isinstance(raw_placements, dict):
             for key, value in raw_placements.items():
@@ -303,12 +539,67 @@ class DisplayLayoutRepository(QObject):
                 ).upper()
                 if flow_direction not in FLOW_DIRECTIONS:
                     flow_direction = "INBOUND"
+                road_arm_id = str(
+                    value.get("road_arm_id", "") or ""
+                ).upper()
+                if road_arm_id not in road_arms:
+                    legacy_default = default_signal_placements(
+                        diagram_type,
+                        rotation,
+                        max(1, min(12, number)),
+                    ).get(number)
+                    road_arm_id = (
+                        legacy_default.road_arm_id
+                        if legacy_default is not None
+                        else nearest_road_arm_id(
+                            x,
+                            y,
+                            road_arms,
+                            rotation,
+                        )
+                    )
+                if "lane_position" in value:
+                    try:
+                        lane_position = max(
+                            1,
+                            min(4, int(value.get("lane_position", 1))),
+                        )
+                    except (TypeError, ValueError):
+                        lane_position = 1
+                else:
+                    legacy_lane_counts[road_arm_id] = (
+                        legacy_lane_counts.get(road_arm_id, 0) + 1
+                    )
+                    lane_position = min(
+                        4,
+                        legacy_lane_counts[road_arm_id],
+                    )
+                raw_destinations = value.get("destination_arm_ids", [])
+                destination_arm_ids = (
+                    [
+                        str(item).upper()
+                        for item in raw_destinations
+                        if str(item).upper() in road_arms
+                        and str(item).upper() != road_arm_id
+                    ]
+                    if isinstance(raw_destinations, list)
+                    else []
+                )
+                if not destination_arm_ids:
+                    destination_arm_ids = destination_ids_for_movements(
+                        road_arm_id,
+                        movements,
+                        road_arms,
+                    )
                 placements[number] = SignalPlacement(
                     x=x,
                     y=y,
                     rotation=signal_rotation,
                     movements=movements,
                     flow_direction=flow_direction,
+                    road_arm_id=road_arm_id,
+                    lane_position=lane_position,
+                    destination_arm_ids=destination_arm_ids,
                 )
 
         camera_raw = raw.get("cameras", {})
@@ -334,10 +625,9 @@ class DisplayLayoutRepository(QObject):
 
         return ControllerDisplayLayout(
             intersection=IntersectionLayoutConfig(
-                diagram_type=str(
-                    intersection_raw.get("diagram_type", "FOUR_WAY")
-                ),
+                diagram_type=diagram_type,
                 rotation=rotation,
+                road_arms=road_arms,
                 placements=placements,
             ),
             cameras=CameraLayoutConfig(

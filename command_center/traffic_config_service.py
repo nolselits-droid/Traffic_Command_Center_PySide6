@@ -615,7 +615,7 @@ class TrafficConfigService(QObject):
         self.busy_changed.emit(True)
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.00-FIX1-TEST")
         request.setTransferTimeout(3500)
         reply = (
             self._network.post(request, QByteArray())

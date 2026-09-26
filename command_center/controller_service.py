@@ -214,7 +214,7 @@ class ControllerService(QObject):
 
         request = QNetworkRequest(QUrl(f"{base_url}/api/status"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.5.05-FIX7-TEST")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.00-FIX1-TEST")
         request.setTransferTimeout(1800)
         reply = self._network.get(request)
         self._pending[controller_id] = reply

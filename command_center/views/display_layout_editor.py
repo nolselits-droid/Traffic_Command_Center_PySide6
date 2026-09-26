@@ -24,7 +24,10 @@ from ..display_layout import (
     INTERSECTION_TYPES,
     CameraTilePlacement,
     ControllerDisplayLayout,
+    default_road_arms,
     default_signal_placements,
+    destination_ids_for_movements,
+    movement_name_between,
     automatic_camera_positions,
 )
 from ..models import CameraConfiguration, CameraRole
@@ -173,6 +176,7 @@ class DisplayLayoutEditor(QWidget):
         self._layout = ControllerDisplayLayout()
         self._loading = False
         self._camera_rows: dict[str, dict[str, QWidget]] = {}
+        self._destination_checks: dict[str, QCheckBox] = {}
 
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
@@ -242,6 +246,30 @@ class DisplayLayoutEditor(QWidget):
             self._intersection_template_changed
         )
         diagram_controls.addWidget(self.rotation_input, 1, 1)
+        diagram_controls.addWidget(QLabel("Selected Road Arm"), 2, 0)
+        self.road_arm_selector = QComboBox()
+        self.road_arm_selector.currentIndexChanged.connect(
+            self._selected_arm_changed
+        )
+        diagram_controls.addWidget(self.road_arm_selector, 2, 1)
+        diagram_controls.addWidget(QLabel("Arm Angle"), 3, 0)
+        self.arm_angle_input = QSpinBox()
+        self.arm_angle_input.setRange(0, 359)
+        self.arm_angle_input.setSuffix("°")
+        self.arm_angle_input.valueChanged.connect(self._road_arm_changed)
+        diagram_controls.addWidget(self.arm_angle_input, 3, 1)
+        diagram_controls.addWidget(QLabel("Flow Direction"), 4, 0)
+        self.arm_flow_input = QComboBox()
+        for key, name in FLOW_DIRECTIONS.items():
+            self.arm_flow_input.addItem(name, key)
+        self.arm_flow_input.setToolTip(
+            "Road arm dapat berupa One Way - Inbound, One Way - Outbound, "
+            "Two Way, atau Hidden."
+        )
+        self.arm_flow_input.currentIndexChanged.connect(
+            self._road_arm_changed
+        )
+        diagram_controls.addWidget(self.arm_flow_input, 4, 1)
         diagram_controls.setColumnStretch(1, 1)
         diagram_layout.addLayout(diagram_controls)
         settings_layout.addWidget(diagram_frame)
@@ -264,7 +292,20 @@ class DisplayLayoutEditor(QWidget):
             self._selected_sg_changed
         )
         signal_controls.addWidget(self.sg_selector, 0, 1)
-        signal_controls.addWidget(QLabel("SG Rotation"), 1, 0)
+        signal_controls.addWidget(QLabel("Assigned Road Arm"), 1, 0)
+        self.assigned_arm_input = QComboBox()
+        self.assigned_arm_input.currentIndexChanged.connect(
+            self._sg_visual_changed
+        )
+        signal_controls.addWidget(self.assigned_arm_input, 1, 1)
+        signal_controls.addWidget(QLabel("Lane Position"), 2, 0)
+        self.lane_position_input = QSpinBox()
+        self.lane_position_input.setRange(1, 4)
+        self.lane_position_input.valueChanged.connect(
+            self._sg_visual_changed
+        )
+        signal_controls.addWidget(self.lane_position_input, 2, 1)
+        signal_controls.addWidget(QLabel("SG Rotation"), 3, 0)
         self.sg_rotation_input = QComboBox()
         self.sg_rotation_input.addItem("Auto", -1)
         for value in (0, 90, 180, 270):
@@ -272,43 +313,18 @@ class DisplayLayoutEditor(QWidget):
         self.sg_rotation_input.currentIndexChanged.connect(
             self._sg_visual_changed
         )
-        signal_controls.addWidget(self.sg_rotation_input, 1, 1)
-        movement_label = QLabel("Vehicle Movement")
+        signal_controls.addWidget(self.sg_rotation_input, 3, 1)
+        movement_label = QLabel("Destination Arms")
         movement_label.setToolTip(
-            "Straight, Left, dan Right dapat dipilih bersamaan untuk SG yang sama."
+            "Pilih satu atau beberapa road arm tujuan yang dikendalikan SG ini."
         )
-        signal_controls.addWidget(movement_label, 2, 0)
+        signal_controls.addWidget(movement_label, 4, 0)
         movement_widget = QWidget()
-        movement_row = QHBoxLayout(movement_widget)
-        movement_row.setContentsMargins(0, 0, 0, 0)
-        movement_row.setSpacing(12)
-        self.movement_straight_input = QCheckBox("Straight")
-        self.movement_left_input = QCheckBox("Left")
-        self.movement_right_input = QCheckBox("Right")
-        for checkbox in (
-            self.movement_straight_input,
-            self.movement_left_input,
-            self.movement_right_input,
-        ):
-            checkbox.toggled.connect(self._sg_visual_changed)
-            movement_row.addWidget(checkbox)
-        movement_row.addStretch()
-        signal_controls.addWidget(movement_widget, 2, 1)
-        flow_label = QLabel("Flow Direction")
-        flow_tooltip = (
-            "Pilih One Way menuju intersection, One Way meninggalkan "
-            "intersection, Two Way, atau Hidden."
-        )
-        flow_label.setToolTip(flow_tooltip)
-        signal_controls.addWidget(flow_label, 3, 0)
-        self.flow_direction_input = QComboBox()
-        for key, name in FLOW_DIRECTIONS.items():
-            self.flow_direction_input.addItem(name, key)
-        self.flow_direction_input.setToolTip(flow_tooltip)
-        self.flow_direction_input.currentIndexChanged.connect(
-            self._sg_visual_changed
-        )
-        signal_controls.addWidget(self.flow_direction_input, 3, 1)
+        self.destination_layout = QGridLayout(movement_widget)
+        self.destination_layout.setContentsMargins(0, 0, 0, 0)
+        self.destination_layout.setHorizontalSpacing(8)
+        self.destination_layout.setVerticalSpacing(3)
+        signal_controls.addWidget(movement_widget, 4, 1)
         signal_controls.setColumnStretch(1, 1)
         signal_layout.addLayout(signal_controls)
         settings_layout.addWidget(signal_frame)
@@ -350,8 +366,8 @@ class DisplayLayoutEditor(QWidget):
         )
         preview_layout.addWidget(self.intersection_preview, 1)
         hint = muted_label(
-            "Drag SG1–SG12 directly in the preview. Rotation also supports all "
-            "four T-junction orientations."
+            "Drag SG1–SG12 directly in the preview. Road-arm assignment and "
+            "vehicle destinations remain independent from SG display position."
         )
         hint.setWordWrap(True)
         preview_layout.addWidget(hint)
@@ -479,6 +495,7 @@ class DisplayLayoutEditor(QWidget):
                     self._layout.intersection.rotation
                 )
                 self.rotation_input.setCurrentIndex(max(0, rotation_index))
+                self._populate_road_arm_selectors()
                 self.intersection_preview.set_layout_config(
                     self._layout.intersection
                 )
@@ -511,6 +528,7 @@ class DisplayLayoutEditor(QWidget):
         finally:
             self._loading = False
         if self.section == "intersection":
+            self._selected_arm_changed()
             self._selected_sg_changed()
         else:
             self._camera_mode_changed()
@@ -559,6 +577,9 @@ class DisplayLayoutEditor(QWidget):
                     in self._layout.intersection.placements.items()
                     if 1 <= number <= snapshot.active_signal_groups
                 }
+                self._populate_road_arm_selectors(
+                    self.road_arm_selector.currentData()
+                )
                 self.intersection_preview.set_layout_config(
                     self._layout.intersection
                 )
@@ -599,6 +620,7 @@ class DisplayLayoutEditor(QWidget):
             self._loading = False
 
         if self.section == "intersection":
+            self._selected_arm_changed()
             self._selected_sg_changed()
         else:
             self._camera_mode_changed()
@@ -668,33 +690,170 @@ class DisplayLayoutEditor(QWidget):
         spin.setFixedSize(42, 24)
         return spin
 
+    def _populate_road_arm_selectors(
+        self,
+        selected_arm_id: str | None = None,
+    ) -> None:
+        arms = self._layout.intersection.road_arms
+        if not arms:
+            arms = default_road_arms(
+                self._layout.intersection.diagram_type
+            )
+            self._layout.intersection.road_arms = arms
+        selected = str(
+            selected_arm_id
+            or self.road_arm_selector.currentData()
+            or next(iter(arms), "")
+        )
+        assigned = str(
+            self.assigned_arm_input.currentData()
+            or selected
+        )
+        self.road_arm_selector.clear()
+        self.assigned_arm_input.clear()
+        for arm in arms.values():
+            label = f"{arm.name} · {arm.angle:.0f}°"
+            self.road_arm_selector.addItem(label, arm.arm_id)
+            self.assigned_arm_input.addItem(label, arm.arm_id)
+        road_index = self.road_arm_selector.findData(selected)
+        self.road_arm_selector.setCurrentIndex(max(0, road_index))
+        assigned_index = self.assigned_arm_input.findData(assigned)
+        self.assigned_arm_input.setCurrentIndex(max(0, assigned_index))
+
+    def _selected_arm_changed(self) -> None:
+        if self._loading:
+            return
+        arm_id = self.road_arm_selector.currentData()
+        arm = self._layout.intersection.road_arms.get(str(arm_id))
+        if arm is None:
+            return
+        self._loading = True
+        try:
+            self.arm_angle_input.setValue(int(round(arm.angle)) % 360)
+            flow_index = self.arm_flow_input.findData(arm.flow_direction)
+            self.arm_flow_input.setCurrentIndex(max(0, flow_index))
+        finally:
+            self._loading = False
+
+    def _road_arm_changed(self, *_args) -> None:
+        if self._loading:
+            return
+        arm_id = str(self.road_arm_selector.currentData() or "")
+        arm = self._layout.intersection.road_arms.get(arm_id)
+        if arm is None:
+            return
+        arm.angle = float(self.arm_angle_input.value())
+        arm.flow_direction = str(
+            self.arm_flow_input.currentData() or "TWO_WAY"
+        )
+        for placement in self._layout.intersection.placements.values():
+            if placement.road_arm_id == arm_id:
+                placement.flow_direction = arm.flow_direction
+        label = f"{arm.name} · {arm.angle:.0f}°"
+        road_index = self.road_arm_selector.findData(arm_id)
+        assigned_index = self.assigned_arm_input.findData(arm_id)
+        if road_index >= 0:
+            self.road_arm_selector.setItemText(road_index, label)
+        if assigned_index >= 0:
+            self.assigned_arm_input.setItemText(assigned_index, label)
+        self.intersection_preview.set_layout_config(
+            self._layout.intersection
+        )
+        self._selected_sg_changed()
+        self._set_message(
+            f"{arm.name.upper()} ROAD ARM CHANGED · NOT SAVED",
+            "warning",
+        )
+
+    def _rebuild_destination_checks(
+        self,
+        placement,
+    ) -> None:
+        while self.destination_layout.count():
+            item = self.destination_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        self._destination_checks.clear()
+        source = self._layout.intersection.road_arms.get(
+            placement.road_arm_id
+        )
+        if source is None:
+            return
+        destinations = [
+            arm
+            for arm in self._layout.intersection.road_arms.values()
+            if arm.arm_id != source.arm_id
+        ]
+        for index, arm in enumerate(destinations):
+            movement = movement_name_between(source, arm)
+            checkbox = QCheckBox(f"{arm.name} · {movement}")
+            checkbox.setChecked(
+                arm.arm_id in placement.destination_arm_ids
+            )
+            checkbox.setEnabled(
+                source.flow_direction in {"INBOUND", "TWO_WAY"}
+                and arm.flow_direction in {"OUTBOUND", "TWO_WAY"}
+            )
+            checkbox.setToolTip(
+                f"Vehicle from {source.name} exits through {arm.name}."
+            )
+            checkbox.toggled.connect(self._sg_visual_changed)
+            self.destination_layout.addWidget(
+                checkbox,
+                index // 2,
+                index % 2,
+            )
+            self._destination_checks[arm.arm_id] = checkbox
+        if not destinations:
+            label = muted_label("No destination road arm")
+            self.destination_layout.addWidget(label, 0, 0)
+
     def _intersection_template_changed(self) -> None:
         if self._loading or not self.controller_id:
             return
         snapshot = self.service.get_controller(self.controller_id)
         if snapshot is None:
             return
-        self._layout.intersection.diagram_type = str(
-            self.intersection_type_input.currentData()
-        )
-        self._layout.intersection.rotation = int(
-            self.rotation_input.currentData()
-        )
+        new_type = str(self.intersection_type_input.currentData())
+        new_rotation = int(self.rotation_input.currentData())
+        type_changed = new_type != self._layout.intersection.diagram_type
+        self._layout.intersection.diagram_type = new_type
+        self._layout.intersection.rotation = new_rotation
+        if type_changed or not self._layout.intersection.road_arms:
+            self._layout.intersection.road_arms = default_road_arms(new_type)
         previous = self._layout.intersection.placements
         updated = default_signal_placements(
-            self._layout.intersection.diagram_type,
-            self._layout.intersection.rotation,
+            new_type,
+            new_rotation,
             snapshot.active_signal_groups,
         )
         for number, placement in updated.items():
             old = previous.get(number)
             if old is not None:
                 placement.rotation = old.rotation
-                placement.movements = list(old.movements)
-                placement.flow_direction = old.flow_direction
+                if not type_changed:
+                    placement.movements = list(old.movements)
+                    placement.flow_direction = old.flow_direction
+                    placement.road_arm_id = old.road_arm_id
+                    placement.lane_position = old.lane_position
+                    placement.destination_arm_ids = list(
+                        old.destination_arm_ids
+                    )
         self._layout.intersection.placements = updated
+        self._loading = True
+        try:
+            self._populate_road_arm_selectors()
+        finally:
+            self._loading = False
         self.intersection_preview.set_layout_config(
             self._layout.intersection
+        )
+        self._selected_arm_changed()
+        self._selected_sg_changed()
+        self._set_message(
+            f"{new_type.replace('_', ' ')} TEMPLATE CHANGED · NOT SAVED",
+            "warning",
         )
 
     def _selected_sg_changed(self) -> None:
@@ -709,19 +868,18 @@ class DisplayLayoutEditor(QWidget):
             return
         self._loading = True
         try:
+            assigned_index = self.assigned_arm_input.findData(
+                placement.road_arm_id
+            )
+            self.assigned_arm_input.setCurrentIndex(
+                max(0, assigned_index)
+            )
+            self.lane_position_input.setValue(placement.lane_position)
             rotation_index = self.sg_rotation_input.findData(
                 placement.rotation
             )
             self.sg_rotation_input.setCurrentIndex(max(0, rotation_index))
-            self.movement_straight_input.setChecked(
-                "STRAIGHT" in placement.movements
-            )
-            self.movement_left_input.setChecked("LEFT" in placement.movements)
-            self.movement_right_input.setChecked("RIGHT" in placement.movements)
-            flow_index = self.flow_direction_input.findData(
-                placement.flow_direction
-            )
-            self.flow_direction_input.setCurrentIndex(max(0, flow_index))
+            self._rebuild_destination_checks(placement)
         finally:
             self._loading = False
         self.intersection_preview.set_selected_signal(number)
@@ -740,25 +898,64 @@ class DisplayLayoutEditor(QWidget):
         placement = self._layout.intersection.placements.get(int(number))
         if placement is None:
             return
-        placement.rotation = int(self.sg_rotation_input.currentData())
-        movements = [
-            key
-            for key, widget in (
-                ("STRAIGHT", self.movement_straight_input),
-                ("LEFT", self.movement_left_input),
-                ("RIGHT", self.movement_right_input),
+        arm_id = str(self.assigned_arm_input.currentData() or "")
+        source_changed = arm_id != placement.road_arm_id
+        if arm_id not in self._layout.intersection.road_arms:
+            return
+        if source_changed:
+            placement.road_arm_id = arm_id
+            placement.destination_arm_ids = destination_ids_for_movements(
+                arm_id,
+                placement.movements,
+                self._layout.intersection.road_arms,
             )
-            if widget.isChecked()
-        ]
-        if not movements:
             self._loading = True
-            self.movement_straight_input.setChecked(True)
-            self._loading = False
-            movements = ["STRAIGHT"]
-        placement.movements = movements
-        placement.flow_direction = str(
-            self.flow_direction_input.currentData()
-        )
+            try:
+                self._rebuild_destination_checks(placement)
+            finally:
+                self._loading = False
+        placement.lane_position = self.lane_position_input.value()
+        placement.rotation = int(self.sg_rotation_input.currentData())
+        destinations = [
+            destination_id
+            for destination_id, checkbox in self._destination_checks.items()
+            if checkbox.isChecked() and checkbox.isEnabled()
+        ]
+        if not destinations:
+            first_enabled = next(
+                (
+                    (destination_id, checkbox)
+                    for destination_id, checkbox
+                    in self._destination_checks.items()
+                    if checkbox.isEnabled()
+                ),
+                None,
+            )
+            if first_enabled is not None:
+                destination_id, checkbox = first_enabled
+                self._loading = True
+                checkbox.setChecked(True)
+                self._loading = False
+                destinations = [destination_id]
+        placement.destination_arm_ids = destinations
+        source = self._layout.intersection.road_arms[arm_id]
+        placement.flow_direction = source.flow_direction
+        movements: list[str] = []
+        for destination_id in destinations:
+            destination = self._layout.intersection.road_arms.get(
+                destination_id
+            )
+            if destination is None:
+                continue
+            name = movement_name_between(source, destination).upper()
+            movement = (
+                "LEFT" if "LEFT" in name
+                else "RIGHT" if "RIGHT" in name
+                else "STRAIGHT"
+            )
+            if movement not in movements:
+                movements.append(movement)
+        placement.movements = movements or ["STRAIGHT"]
         self.intersection_preview.set_layout_config(
             self._layout.intersection
         )

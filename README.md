@@ -1,8 +1,8 @@
-# Traffic Command Center — PySide6 V0.5.05 FIX7 TEST
+# Traffic Command Center — PySide6 V0.6.00 FIX1 TEST
 
 Command Center untuk monitoring Traffic Light Controller ESP32-S3 V1.23.1, konfigurasi traffic transaksional, Event & Alarm, dan monitoring kamera RTSP.
 
-V0.5.05 menambahkan layout Live View per controller. **FIX1** menambahkan rotasi individual SG dan garis/panah pergerakan kendaraan. **FIX2** memisahkan Intersection Layout dan Camera Layout serta menyamakan koordinatnya. **FIX3** menyusun setting di kiri dan preview di kanan serta memperbaiki Two-Way. **FIX4** menghapus Mock Data dan merapikan System Settings. **FIX5** menyinkronkan topology SG/kamera setelah status ESP32-S3 diterima tanpa membangun ulang editor setiap detik serta membuat tombol aksi Intersection sejajar. **FIX6** membuat input ROW/COL/W/H Camera Layout lebih pendek. **FIX7** memisahkan pengaturan Intersection Diagram dan Signal Group, memperjelas istilah One Way, serta memadatkan seluruh baris Camera Layout. Setting tampilan tetap disimpan lokal di PC dan tidak mengubah konfigurasi traffic ESP32-S3.
+V0.6.00 memperluas Intersection Layout menjadi model road arm eksplisit hingga lima jalan. **FIX1** mengganti garis flow yang bertumpuk menjadi satu inbound trunk per SG dengan cabang Straight/Left/Right di dekat intersection. Straight 180° dibuat sejajar dengan lajur, sedangkan gerakan belok memakai kurva cubic yang halus. Layout tetap disimpan lokal di PC; sinkronisasi layout dengan ESP32-S3 belum termasuk dalam versi ini.
 
 ## Fitur utama
 

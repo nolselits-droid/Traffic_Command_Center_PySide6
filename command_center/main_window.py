@@ -33,7 +33,7 @@ from .widgets.common import muted_label, status_label
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Traffic Command Center V0.5.05 FIX7 TEST")
+        self.setWindowTitle("Traffic Command Center V0.6.00 FIX1 TEST")
         self.setMinimumSize(1180, 700)
         self.resize(1600, 900)
 
@@ -86,12 +86,12 @@ class MainWindow(QMainWindow):
         self._update_global_status()
         self.navigate("overview")
         self.statusBar().showMessage(
-            "V0.5.05 FIX7 TEST · Refined Intersection & Camera Layout UI"
+            "V0.6.00 FIX1 TEST · Branched Vehicle Flow Rendering"
         )
         self.event_service.record_audit(
             "SYSTEM",
             "Command Center",
-            "Command Center V0.5.05 FIX7 TEST started",
+            "Command Center V0.6.00 FIX1 TEST started",
         )
 
         fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
         title = QLabel("TRAFFIC COMMAND CENTER")
         title.setObjectName("appTitle")
         subtitle = muted_label(
-            "Central Monitoring & Control · PySide6 V0.5.05 FIX7 TEST"
+            "Central Monitoring & Control · PySide6 V0.6.00 FIX1 TEST"
         )
         identity.addWidget(title)
         identity.addWidget(subtitle)

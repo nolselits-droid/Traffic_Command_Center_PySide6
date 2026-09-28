@@ -52,6 +52,8 @@ class RoadArm:
 class SignalPlacement:
     x: float
     y: float
+    label_offset_x: float = 0.0
+    label_offset_y: float = 0.07
     rotation: int = -1
     movements: list[str] = field(default_factory=lambda: ["STRAIGHT"])
     flow_direction: str = "INBOUND"
@@ -97,6 +99,13 @@ def _rotate_point(x: float, y: float, rotation: int) -> tuple[float, float]:
     turns = (rotation // 90) % 4
     for _ in range(turns):
         x, y = 1.0 - y, x
+    return x, y
+
+
+def _rotate_offset(x: float, y: float, rotation: int) -> tuple[float, float]:
+    turns = (rotation // 90) % 4
+    for _ in range(turns):
+        x, y = -y, x
     return x, y
 
 
@@ -284,11 +293,14 @@ def default_signal_placements(
     lane_counts: dict[str, int] = {}
     for index in range(max(0, min(12, count))):
         x, y = _rotate_point(*points[index], rotation)
+        label_offset_x, label_offset_y = _rotate_offset(0.0, 0.07, rotation)
         arm_id = arm_order[index % len(arm_order)] if arm_order else ""
         lane_counts[arm_id] = lane_counts.get(arm_id, 0) + 1
         placements[index + 1] = SignalPlacement(
             x=x,
             y=y,
+            label_offset_x=label_offset_x,
+            label_offset_y=label_offset_y,
             road_arm_id=arm_id,
             lane_position=lane_counts[arm_id],
             destination_arm_ids=destination_ids_for_movements(
@@ -340,9 +352,11 @@ def automatic_camera_positions(
 
 
 class DisplayLayoutRepository(QObject):
-    """Local, per-controller presentation settings for Live View."""
+    """Local camera settings plus an offline cache of controller layout."""
 
     layout_changed = Signal(str)
+    intersection_changed = Signal(str)
+    camera_changed = Signal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -370,19 +384,24 @@ class DisplayLayoutRepository(QObject):
             layout.intersection.road_arms = default_road_arms(
                 layout.intersection.diagram_type
             )
-        defaults = default_signal_placements(
-            layout.intersection.diagram_type,
-            layout.intersection.rotation,
-            active_signal_groups,
-        )
-        for number, placement in defaults.items():
-            if number not in layout.intersection.placements:
-                layout.intersection.placements[number] = placement
-        layout.intersection.placements = {
-            number: placement
-            for number, placement in layout.intersection.placements.items()
-            if 1 <= number <= max(1, active_signal_groups)
-        }
+        # At application startup the controller snapshot is still a placeholder
+        # with active_signal_groups == 0.  Keep the complete cached layout until
+        # the first real /api/status response arrives; trimming it here would
+        # leave Live View with only SG1 until another event forces a redraw.
+        if active_signal_groups > 0:
+            defaults = default_signal_placements(
+                layout.intersection.diagram_type,
+                layout.intersection.rotation,
+                active_signal_groups,
+            )
+            for number, placement in defaults.items():
+                if number not in layout.intersection.placements:
+                    layout.intersection.placements[number] = placement
+            layout.intersection.placements = {
+                number: placement
+                for number, placement in layout.intersection.placements.items()
+                if 1 <= number <= active_signal_groups
+            }
         for placement in layout.intersection.placements.values():
             if placement.road_arm_id not in layout.intersection.road_arms:
                 placement.road_arm_id = nearest_road_arm_id(
@@ -423,6 +442,39 @@ class DisplayLayoutRepository(QObject):
         self._records[controller_id] = self._encode(deepcopy(layout))
         self._save_records()
         self.layout_changed.emit(controller_id)
+        self.intersection_changed.emit(controller_id)
+        self.camera_changed.emit(controller_id)
+
+    def cache_intersection(
+        self,
+        controller_id: str,
+        intersection: IntersectionLayoutConfig,
+        *,
+        force_notify: bool = False,
+    ) -> None:
+        """Cache controller-owned layout while preserving local camera layout."""
+        current = self._decode(self._records.get(controller_id, {}))
+        current.intersection = deepcopy(intersection)
+        encoded = self._encode(current)
+        if self._records.get(controller_id) == encoded:
+            if force_notify:
+                self.intersection_changed.emit(controller_id)
+            return
+        self._records[controller_id] = encoded
+        self._save_records()
+        self.intersection_changed.emit(controller_id)
+
+    def save_cameras(
+        self,
+        controller_id: str,
+        cameras: CameraLayoutConfig,
+    ) -> None:
+        """Save PC-local camera layout without rewriting controller layout cache."""
+        current = self._decode(self._records.get(controller_id, {}))
+        current.cameras = deepcopy(cameras)
+        self._records[controller_id] = self._encode(current)
+        self._save_records()
+        self.camera_changed.emit(controller_id)
 
     def _load_records(self) -> dict[str, dict[str, Any]]:
         try:
@@ -507,6 +559,14 @@ class DisplayLayoutRepository(QObject):
                     number = int(key)
                     x = max(0.05, min(0.95, float(value.get("x", 0.5))))
                     y = max(0.05, min(0.95, float(value.get("y", 0.5))))
+                    label_offset_x = max(
+                        -0.24,
+                        min(0.24, float(value.get("label_offset_x", 0.0))),
+                    )
+                    label_offset_y = max(
+                        -0.24,
+                        min(0.24, float(value.get("label_offset_y", 0.07))),
+                    )
                 except (TypeError, ValueError):
                     continue
                 try:
@@ -594,6 +654,8 @@ class DisplayLayoutRepository(QObject):
                 placements[number] = SignalPlacement(
                     x=x,
                     y=y,
+                    label_offset_x=label_offset_x,
+                    label_offset_y=label_offset_y,
                     rotation=signal_rotation,
                     movements=movements,
                     flow_direction=flow_direction,
@@ -642,3 +704,81 @@ class DisplayLayoutRepository(QObject):
                 tiles=tiles,
             ),
         )
+
+
+def intersection_from_api(payload: dict[str, Any]) -> tuple[
+    IntersectionLayoutConfig,
+    int,
+    int,
+]:
+    """Parse the ESP32 Intersection Layout API without silently inventing data."""
+    if not isinstance(payload, dict) or payload.get("ok") is False:
+        raise ValueError(str(payload.get("message") or "Layout API tidak valid."))
+    schema_version = int(payload.get("schemaVersion", 0) or 0)
+    revision = int(payload.get("layoutRevision", 0) or 0)
+    if schema_version != 2 or revision <= 0:
+        raise ValueError("Schema atau Layout Revision controller tidak didukung.")
+    raw = payload.get("intersection")
+    if not isinstance(raw, dict):
+        raise ValueError("Object intersection tidak ditemukan.")
+
+    wrapper = DisplayLayoutRepository._decode({"intersection": raw})
+    intersection = wrapper.intersection
+    if len(intersection.placements) != 12:
+        raise ValueError("Controller harus menyediakan placement SG1 sampai SG12.")
+    expected_arms = {
+        "FOUR_WAY": 4,
+        "FIVE_WAY": 5,
+        "T_JUNCTION": 3,
+        "STRAIGHT_ROAD": 2,
+        "SINGLE_APPROACH": 1,
+    }.get(intersection.diagram_type, 0)
+    if expected_arms == 0 or len(intersection.road_arms) != expected_arms:
+        raise ValueError("Jumlah Road Arm tidak sesuai Diagram Type.")
+    return intersection, schema_version, revision
+
+
+def intersection_to_api(
+    layout: IntersectionLayoutConfig,
+    expected_revision: int,
+) -> dict[str, Any]:
+    """Build the exact schema accepted by ESP32 /api/intersection/layout."""
+    if expected_revision <= 0:
+        raise ValueError("Layout Revision belum tersedia. Muat ulang controller.")
+    road_arms = {
+        arm_id: {
+            "arm_id": arm.arm_id,
+            "name": arm.name,
+            "angle": round(float(arm.angle) % 360.0, 1),
+            "flow_direction": arm.flow_direction,
+        }
+        for arm_id, arm in layout.road_arms.items()
+    }
+    placements = {
+        str(number): {
+            "x": round(float(placement.x), 3),
+            "y": round(float(placement.y), 3),
+            "label_offset_x": round(float(placement.label_offset_x), 3),
+            "label_offset_y": round(float(placement.label_offset_y), 3),
+            "rotation": int(placement.rotation),
+            "movements": list(placement.movements),
+            "flow_direction": placement.flow_direction,
+            "road_arm_id": placement.road_arm_id,
+            "lane_position": int(placement.lane_position),
+            "destination_arm_ids": list(placement.destination_arm_ids),
+        }
+        for number, placement in sorted(layout.placements.items())
+        if 1 <= int(number) <= 12
+    }
+    if len(placements) != 12:
+        raise ValueError("Layout harus berisi placement SG1 sampai SG12.")
+    return {
+        "schemaVersion": 2,
+        "expectedRevision": int(expected_revision),
+        "intersection": {
+            "diagram_type": layout.diagram_type,
+            "rotation": int(layout.rotation),
+            "road_arms": road_arms,
+            "placements": placements,
+        },
+    }

@@ -1,0 +1,43 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX4
+================================================================
+
+A. TAMPILAN INTERSECTION LAYOUT
+-------------------------------
+1. Jalankan python main.py.
+2. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+3. Pastikan tidak ada kotak informasi di atas panel utama.
+4. Pastikan panel kiri sekitar 40% dan panel kanan sekitar 60%.
+5. Pastikan semua label dan field panel kiri terlihat lengkap.
+6. Pastikan panel tidak dapat digeser.
+7. Pastikan tidak ada horizontal scroll atau menu yang bergeser ke kiri.
+8. Pastikan teks drag tidak tampil di bagian bawah kanvas.
+9. Pastikan Live Preview tetap berada di tengah atas dan tidak bergerak sendiri.
+
+B. TAMPILAN CAMERA LAYOUT
+-------------------------
+1. Buka SYSTEM SETTINGS -> CAMERA LAYOUT.
+2. Pastikan kotak informasi "Camera Layout disimpan lokal di PC..." tidak ada.
+3. Pastikan fungsi Camera Layout tetap berjalan seperti sebelumnya.
+
+C. SINKRONISASI LIVE VIEW
+-------------------------
+1. Buka INTERSECTION LAYOUT.
+2. Tekan RELOAD FROM CONTROLLER.
+3. Ubah Diagram Type, Rotation, Road Arm, posisi SG, atau posisi nama SG.
+4. Tekan SAVE INTERSECTION LAYOUT.
+5. Tunggu notifikasi SAVE berhasil.
+6. Buka tab LIVE VIEW.
+
+Hasil yang benar:
+- Diagram pada LIVE VIEW sama dengan Live Preview yang disimpan.
+- Perubahan terlihat tanpa harus menutup dan membuka ulang aplikasi.
+- GET verifikasi tetap berjalan dan revision controller diperbarui.
+
+D. REVISION GUARD
+-----------------
+1. Simpan layout dan catat revision baru.
+2. Coba simpan menggunakan layout lama jika tersedia.
+3. Pastikan conflict 409 tetap ditolak.
+
+Catatan: nama SG disimpan menggunakan SAVE SG NAMES, bukan SAVE INTERSECTION
+LAYOUT.

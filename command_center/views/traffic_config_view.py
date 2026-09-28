@@ -679,7 +679,7 @@ class TrafficConfigView(QWidget):
         if manual:
             self._record_audit(
                 "Traffic configuration refresh requested",
-                "Manual refresh from Command Center V0.6.00 FIX1 TEST",
+                "Manual refresh from Command Center V0.6.01 TEST1 FIX8",
             )
         self.config_service.load_initial(self.current_controller_id)
 

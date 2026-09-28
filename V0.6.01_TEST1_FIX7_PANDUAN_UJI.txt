@@ -1,0 +1,93 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX7
+=====================================================
+
+A. PERSIAPAN
+------------
+1. Aktifkan virtual environment pada folder proyek.
+2. Jalankan aplikasi dengan perintah:
+
+   python main.py
+
+3. Pastikan controller ESP32-S3 online dan waktu PC Windows benar.
+4. Pastikan minimal satu kamera dapat tampil sebelum pengujian cache dilakukan.
+
+B. UJI RTC SYNC FROM PC
+-----------------------
+1. Buka SYSTEM SETTINGS, kemudian tab TIME / RTC.
+2. Catat nilai selisih RTC dengan PC sebelum sinkronisasi.
+3. Tekan SYNC FROM PC.
+4. Sengaja tunggu 3-5 detik pada dialog konfirmasi, lalu tekan YES.
+5. Tunggu pembacaan RTC berikutnya.
+6. Bandingkan jam controller dengan jam PC.
+
+Hasil yang diharapkan:
+- Waktu yang dikirim adalah waktu saat YES ditekan, bukan waktu saat dialog
+  pertama kali muncul.
+- Selisih normal berada sekitar 0 sampai 1 detik, tergantung waktu respons LAN,
+  batas satu detik RTC, dan saat layar diperbarui.
+- Tidak muncul lagi selisih negatif 3-5 detik hanya karena dialog konfirmasi
+  dibiarkan terbuka.
+
+C. UJI CACHE/LATENCY PER KAMERA
+-------------------------------
+1. Buka CAMERA CONFIGURATION.
+2. Pilih Camera SG1.
+3. Set RTSP cache / latency ke 800 ms lalu tekan SAVE CAMERA.
+4. Buka LIVE VIEW dan gerakkan tangan di depan kamera untuk memperkirakan delay.
+5. Kembali ke CAMERA CONFIGURATION dan ubah menjadi 1400 ms.
+6. Tekan SAVE CAMERA dan ulangi pengamatan.
+7. Atur Camera SG2 ke nilai berbeda, misalnya 1000 ms.
+8. Tutup dan jalankan ulang aplikasi, lalu pastikan nilai SG1 dan SG2 tetap
+   berbeda sesuai nilai yang disimpan.
+
+Hasil yang diharapkan:
+- Nilai dapat diatur pada rentang 200-3000 ms.
+- Setelah SAVE, hanya kamera yang dipilih yang melakukan reconnect.
+- Preview, fullscreen, dan grid Live View memakai nilai kamera masing-masing.
+- Nilai yang lebih kecil umumnya menurunkan delay tetapi dapat lebih mudah
+  tersendat apabila jaringan atau stream kamera tidak stabil.
+
+D. UJI MIGRASI KONFIGURASI KAMERA LAMA
+--------------------------------------
+1. Jalankan aplikasi menggunakan cameras.json lama yang belum mempunyai field
+   rtspCacheMs.
+2. Buka CAMERA CONFIGURATION pada setiap kamera.
+
+Hasil yang diharapkan:
+- Aplikasi tetap dapat dijalankan tanpa error.
+- RTSP cache / latency menampilkan default 1400 ms.
+- Setelah SAVE CAMERA, field baru disimpan otomatis.
+
+E. UJI SINKRONISASI LAYOUT SETELAH RESTORE
+------------------------------------------
+1. Buat backup controller ketika Intersection Layout berada pada kondisi A.
+2. Ubah layout controller menjadi kondisi B dan simpan.
+3. Pastikan Live View menampilkan kondisi B.
+4. Restore backup kondisi A melalui BACKUP & RESTORE.
+5. Amati Live View tanpa membuka editor dan tanpa menekan RELOAD/SAVE.
+
+Hasil yang diharapkan:
+- Dashboard ESP32-S3 kembali ke layout A.
+- Command Center mengambil layout A secara otomatis setelah restore berhasil.
+- Live View ikut berubah ke layout A tanpa menunggu interval 30 detik dan tanpa
+  perlu SAVE INTERSECTION LAYOUT.
+
+F. UJI PERUBAHAN LAYOUT DARI CLIENT LAIN
+----------------------------------------
+1. Biarkan Command Center membuka LIVE VIEW.
+2. Ubah dan simpan Intersection Layout melalui dashboard ESP32-S3 atau PC lain.
+3. Amati Command Center.
+
+Hasil yang diharapkan:
+- Perubahan layoutRevision pada /api/status terdeteksi.
+- Command Center menjalankan GET layout dan memperbarui Live View otomatis.
+- Traffic runtime tidak berubah karena layout hanya merupakan data tampilan.
+
+G. REGRESI DASAR
+----------------
+1. Pastikan monitoring status controller tetap diperbarui.
+2. Pastikan SKIP, HOLD, dan FLASHING tetap bekerja.
+3. Pastikan Traffic Configuration tetap dapat dibaca dan disimpan.
+4. Pastikan Backup file ke PC tetap berhasil.
+5. Pastikan kamera lain tidak ikut restart ketika satu kamera disimpan.
+6. Pastikan aplikasi tetap dapat dibuka ketika VLC atau satu kamera offline.

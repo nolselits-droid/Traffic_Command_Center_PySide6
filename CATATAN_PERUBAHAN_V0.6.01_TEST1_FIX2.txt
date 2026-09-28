@@ -1,0 +1,26 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX2
+================================================================
+
+Fokus revisi
+------------
+Perbaikan lanjutan sisi horizontal tab INTERSECTION LAYOUT.
+
+Perubahan
+---------
+1. Lebar minimum panel pengaturan diturunkan dari 350 px menjadi 300 px.
+2. Lebar maksimum panel pengaturan diturunkan menjadi 390 px supaya Live
+   Preview mendapat ruang lebih luas.
+3. Lebar minimum panel kanan diturunkan dari 420 px menjadi 300 px.
+4. Minimum Live Preview diturunkan dari 300 x 300 menjadi 240 x 240.
+   Kanvas tetap persegi dan membesar otomatis ketika ruang tersedia.
+5. Combo box menggunakan minimum contents length agar teks pilihan yang panjang
+   tidak memaksa seluruh panel melebar.
+6. Tombol RELOAD, RESET, dan SAVE disusun vertikal sehingga tidak saling
+   menekan pada layar sempit.
+7. Signal Group Identification menggunakan satu kolom. Semua SG tetap dapat
+   dijangkau melalui scroll vertikal panel kanan.
+8. Scroll horizontal tetap dimatikan karena seluruh isi sekarang dirancang
+   menyesuaikan lebar viewport.
+
+Tidak ada perubahan pada API controller, layoutRevision, data Intersection
+Layout, Camera Layout, maupun traffic runtime.

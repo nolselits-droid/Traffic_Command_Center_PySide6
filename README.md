@@ -1,8 +1,60 @@
-# Traffic Command Center — PySide6 V0.6.00 FIX1 TEST
+# Traffic Command Center — PySide6 V0.6.01 TEST1 FIX8
 
-Command Center untuk monitoring Traffic Light Controller ESP32-S3 V1.23.1, konfigurasi traffic transaksional, Event & Alarm, dan monitoring kamera RTSP.
+FIX8 merapikan **SIGNAL GROUP CONFIGURATION → Destination Road Arm**.
+Label form sekarang sejajar dengan pilihan pertama, seluruh pilihan tujuan
+disusun vertikal, dan urutannya dihitung berdasarkan arah kendaraan:
+`Straight`, `Left`, kemudian `Right`. Setiap pilihan memakai format ringkas
+seperti `Arm 3 – South (Straight)` tanpa menampilkan sudut derajat.
 
-V0.6.00 memperluas Intersection Layout menjadi model road arm eksplisit hingga lima jalan. **FIX1** mengganti garis flow yang bertumpuk menjadi satu inbound trunk per SG dengan cabang Straight/Left/Right di dekat intersection. Straight 180° dibuat sejajar dengan lajur, sedangkan gerakan belok memakai kurva cubic yang halus. Layout tetap disimpan lokal di PC; sinkronisasi layout dengan ESP32-S3 belum termasuk dalam versi ini.
+FIX7 memperbaiki sinkronisasi RTC agar nilai waktu diambil setelah operator
+menekan YES, ditambah kompensasi setengah waktu respons dan pembulatan ke detik
+terdekat. Camera Configuration sekarang mempunyai `RTSP cache / latency`
+per kamera (200–3000 ms), dan perubahan hanya me-restart kamera yang disimpan.
+Setelah Restore, Intersection Layout langsung dimuat ulang; perubahan
+`layoutRevision` dari status controller juga memicu sinkronisasi tanpa menunggu
+interval refresh 30 detik.
+
+FIX6 memperbaiki sinkronisasi Intersection Layout saat startup. Live View tidak
+lagi membentuk diagram dari placeholder `active_signal_groups = 0`, dan hasil
+GET pertama maupun RELOAD manual selalu memicu redraw meskipun payload controller
+sama dengan cache lokal. Operator tidak perlu lagi menekan SAVE hanya untuk
+menyamakan Live View dengan dashboard ESP32-S3. Panel Intersection Layout juga
+diubah menjadi 33:67; RELOAD dan RESET sejajar, sedangkan SAVE berada penuh di
+baris bawah.
+
+FIX5 menata field Intersection Diagram dan Signal Group Configuration dalam
+satu baris label–nilai. NORTH, SOUTH, EAST, dan WEST dipindahkan ke luar kanvas
+agar tidak bertumpuk dengan ARM. Refresh layout otomatis dijalankan secara
+silent, tidak menonaktifkan tombol, dan layout yang revision serta isinya sama
+tidak dirender ulang.
+
+FIX4 menetapkan pembagian tab Intersection Layout menjadi 40:60 tanpa pembatas
+yang dapat digeser, menghapus kedua kotak informasi, menghapus petunjuk drag di
+dalam kanvas, dan mengunci isi scroll area agar tidak bergeser horizontal.
+Setelah SAVE berhasil, layout yang dikirim langsung dimasukkan ke shared
+repository sehingga Live View segera menggunakan layout yang sama, kemudian
+GET controller tetap dijalankan sebagai verifikasi.
+
+FIX3 memperbaiki dua masalah yang terlihat pada screenshot Full HD: panel kiri
+tidak lagi dapat bergeser horizontal secara tersembunyi, dan Live Preview tidak
+lagi berubah menjadi banner hijau yang terlalu lebar. Form pengaturan memakai
+label di atas field, sedangkan preview menggunakan widget rasio persegi dengan
+ukuran pilihan 460 × 484 px dan batas maksimum 520 × 544 px.
+
+FIX2 merapikan tab **SYSTEM SETTINGS → INTERSECTION LAYOUT** secara horizontal
+dan vertikal. Panel pengaturan dibuat lebih ramping, tombol tindakan disusun
+vertikal, Signal Group Identification menggunakan satu kolom, dan minimum Live
+Preview diturunkan agar seluruh diagram selalu muat tanpa horizontal clipping.
+
+FIX1 merapikan tab **SYSTEM SETTINGS → INTERSECTION LAYOUT** untuk layar
+minimum 1180×700 maupun layar Full HD. Panel pengaturan dan panel Live Preview
+sekarang mempunyai scroll vertikal independen, ukuran minimum preview diturunkan
+tanpa mengubah rasio diagram, dan tombol tindakan disusun dalam dua baris agar
+tidak saling menimpa.
+
+Command Center untuk monitoring Traffic Light Controller ESP32-S3 V1.24 TEST4, konfigurasi traffic transaksional, Event & Alarm, dan monitoring kamera RTSP.
+
+V0.6.01 TEST1 menyinkronkan Intersection Layout dengan ESP32-S3 melalui `GET/POST /api/intersection/layout`. Controller menjadi sumber data utama, sedangkan PC menyimpan cache untuk tampilan offline. Editor memakai `layoutRevision` untuk mencegah penimpaan perubahan yang lebih baru. Signal Group Identification juga dipindahkan ke tab Intersection Layout agar susunan menu sama dengan dashboard ESP32-S3. Camera Layout tetap merupakan pengaturan lokal Command Center.
 
 ## Fitur utama
 
@@ -192,10 +244,13 @@ Halaman **SYSTEM SETTINGS** menggunakan beberapa transaksi terpisah agar kegagal
 
 Semua tombol tulis dinonaktifkan saat controller offline, Safety tidak `OK`, Safe Apply tidak `IDLE`, Traffic Configuration Draft terbuka, atau RAM traffic masih dimodifikasi. Firmware tetap menjadi validator final. Network hanya ditampilkan; perubahan network wajib melalui portal Network Setup Mode GPIO38 aktif LOW.
 
-Tab **INTERSECTION LAYOUT** dan **CAMERA LAYOUT** bersifat lokal dan tetap dapat diatur ketika controller offline:
+Tab **INTERSECTION LAYOUT** dan **CAMERA LAYOUT** memiliki sumber penyimpanan berbeda:
 
-- **Intersection Diagram** memilih bentuk jalan dan rotation; posisi SG diubah dengan drag langsung pada preview.
-- SG dapat dipilih dari daftar atau diklik pada preview untuk mengatur rotasi lampu, kombinasi Straight/Left/Right, dan arah aliran.
+- **Intersection Layout** dibaca dan disimpan pada ESP32-S3. Cache lokal hanya dipakai untuk tampilan ketika controller offline; penyimpanan dinonaktifkan saat offline.
+- Menu Intersection Layout sama dengan ESP32-S3: **DIAGRAM / LAYOUT**, **ROAD ARM**, dan **SIGNAL GROUP CONFIGURATION**.
+- Signal Group Identification SG1–SG12 berada di bawah Live Preview dan tetap disimpan melalui API System Settings controller.
+- Posisi lampu dan posisi nama SG dapat diubah secara terpisah dengan drag langsung pada preview.
+- Save memakai `expectedRevision`; HTTP 409 meminta operator memuat ulang layout sebelum mengedit kembali.
 - Preview dan Live View menggunakan kanvas persegi serta transformasi koordinat yang sama agar posisi SG konsisten.
 - **Camera Layout / AUTO** menyusun kamera berdasarkan jumlah kamera yang enabled dan visible. Kamera PTZ/overview otomatis diprioritaskan jika tersedia.
 - **Camera Layout / CUSTOM** menggunakan grid 4×4. Penyimpanan ditolak jika dua kamera bertumpuk atau melewati batas grid.
@@ -206,16 +261,17 @@ Tab **INTERSECTION LAYOUT** dan **CAMERA LAYOUT** bersifat lokal dan tetap dapat
 ```text
 command_center_data/controllers.json
 command_center_data/cameras.json
-command_center_data/display_layouts.json
+command_center_data/display_layouts.json  # Camera Layout + cache Intersection Layout
 command_center_data/events.db
 ```
 
 File `cameras.json` tidak menyimpan password. Password disimpan melalui Credential Manager pada sistem operasi.
+Cache Intersection Layout tidak menjadi sumber konfigurasi ketika controller online; data controller selalu menggantikannya setelah sinkronisasi berhasil.
 
 ## Batas keamanan
 
 - Perubahan konfigurasi hanya tersedia pada `LIVE API`, controller ONLINE, dan Draft milik sesi Command Center.
-- Firmware V1.23.1 tetap menjadi sumber data dan validator final.
+- Firmware V1.24 TEST4 tetap menjadi sumber data dan validator final.
 - Save/Apply tidak tersedia sebelum Draft dimodifikasi dan lulus validasi firmware.
 - Safe Apply hanya diminta ketika Safety `OK` dan proses Apply tidak sedang sibuk.
 - Draft eksternal tidak diambil alih atau dibatalkan oleh Command Center.

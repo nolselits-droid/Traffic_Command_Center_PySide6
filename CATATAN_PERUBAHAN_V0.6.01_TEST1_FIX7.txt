@@ -1,0 +1,57 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX7
+===========================================================
+
+1. SINKRONISASI RTC DARI PC
+---------------------------
+- Waktu PC sekarang diambil setelah operator menekan tombol YES pada dialog
+  konfirmasi, bukan sebelum dialog ditampilkan.
+- Ditambahkan kompensasi setengah response time controller dengan batas aman
+  maksimum 500 ms.
+- Nilai dikirim dengan pembulatan ke detik terdekat karena RTC dan API
+  controller menggunakan resolusi satu detik.
+- Estimasi waktu controller yang ditampilkan juga memperhitungkan waktu tempuh
+  respons saat data RTC diterima.
+
+Tujuan perubahan ini adalah menghilangkan selisih negatif beberapa detik yang
+sebelumnya terutama berasal dari lamanya operator menjawab dialog konfirmasi.
+
+2. PENGATURAN CACHE/LATENCY RTSP PER KAMERA
+-------------------------------------------
+- Camera Configuration mempunyai field baru RTSP cache / latency.
+- Rentang nilai: 200 sampai 3000 ms.
+- Nilai awal untuk konfigurasi lama tetap 1400 ms agar kompatibel dan tidak
+  mengubah perilaku kamera sebelum operator melakukan penyesuaian.
+- Nilai disimpan untuk setiap kamera secara terpisah di cameras.json.
+- Grid Live View, Preview, dan tampilan fullscreen memakai nilai kamera yang
+  bersangkutan.
+- Saat SAVE CAMERA ditekan, hanya tile kamera tersebut yang di-restart apabila
+  Live View sedang menjalankan streaming.
+
+Panduan awal:
+- 600-800 ms: prioritas latency rendah pada LAN yang stabil.
+- 1000-1400 ms: pilihan seimbang dan lebih tahan jitter.
+- 1600-3000 ms: untuk jaringan yang tidak stabil, dengan konsekuensi delay
+  lebih besar.
+
+Catatan: delay juga dapat berasal dari encoder kamera, GOP/I-frame, bitrate,
+resolusi, dan beban jaringan. Nilai cache kecil tidak selalu menghilangkan
+seluruh delay.
+
+3. SINKRONISASI INTERSECTION LAYOUT SETELAH RESTORE
+---------------------------------------------------
+- Restore yang berhasil langsung menjadwalkan GET Intersection Layout setelah
+  controller selesai menerima hasil restore.
+- layoutRevision sekarang dibaca dari /api/status.
+- Bila layoutRevision berubah, Command Center langsung mengambil layout baru
+  tanpa menunggu interval refresh normal 30 detik.
+- Live View dan editor Intersection Layout memakai shared repository yang sama,
+  sehingga keduanya diperbarui oleh hasil GET controller.
+
+4. KOMPATIBILITAS
+-----------------
+- File cameras.json lama yang belum mempunyai rtspCacheMs tetap dapat dibaca.
+- Nilai cache yang hilang atau tidak valid kembali ke default 1400 ms.
+- Tidak ada perubahan API firmware untuk pengaturan kamera karena konfigurasi
+  kamera tetap disimpan lokal di PC Command Center.
+- Sinkronisasi layout memerlukan firmware yang menyediakan layoutRevision pada
+  /api/status dan GET /api/intersection/layout, seperti ESP32-S3 V1.24 TEST4.

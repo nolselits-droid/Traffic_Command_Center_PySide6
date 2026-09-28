@@ -184,6 +184,22 @@ QFrame#layoutSettingsGroup {
     border-radius: 8px;
 }
 
+QFrame#externalCompassFrame {
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#externalCompassLabel {
+    min-width: 44px;
+    color: #79c7ff;
+    background-color: #0a1725;
+    border: 1px solid #31506b;
+    border-radius: 7px;
+    padding: 3px 7px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
 QLabel#layoutGroupTitle {
     color: #8fcdf8;
     background-color: transparent;

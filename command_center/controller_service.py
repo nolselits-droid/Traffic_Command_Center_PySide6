@@ -16,6 +16,7 @@ from PySide6.QtNetwork import (
 
 from .camera_store import CameraRepository
 from .display_layout import DisplayLayoutRepository
+from .intersection_layout_service import IntersectionLayoutService
 from .models import (
     CameraConfiguration,
     CameraRole,
@@ -86,6 +87,7 @@ class ControllerService(QObject):
 
     snapshot_updated = Signal(str)
     controllers_changed = Signal()
+    camera_configuration_changed = Signal(str, str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -100,6 +102,11 @@ class ControllerService(QObject):
         self._poll_suspended: dict[str, set[str]] = {}
         self.camera_repository = CameraRepository()
         self.display_layout_repository = DisplayLayoutRepository(self)
+        self.intersection_layout_service = IntersectionLayoutService(
+            self,
+            self.display_layout_repository,
+            self,
+        )
 
         self._network = QNetworkAccessManager(self)
         self._timer = QTimer(self)
@@ -127,6 +134,15 @@ class ControllerService(QObject):
     def base_url(self, controller_id: str) -> str:
         """Return the configured controller URL without exposing registry internals."""
         return self._endpoints.get(controller_id, "")
+
+    def request_owner_active(
+        self,
+        controller_id: str,
+        *,
+        excluding: str = "",
+    ) -> bool:
+        owners = self._poll_suspended.get(controller_id, set())
+        return any(owner != excluding for owner in owners)
 
     def apply_settings(
         self,
@@ -214,7 +230,7 @@ class ControllerService(QObject):
 
         request = QNetworkRequest(QUrl(f"{base_url}/api/status"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.00-FIX1-TEST")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.01-TEST1-FIX8")
         request.setTransferTimeout(1800)
         reply = self._network.get(request)
         self._pending[controller_id] = reply
@@ -335,6 +351,10 @@ class ControllerService(QObject):
         snapshot.runtime_revision = max(
             0,
             self._safe_int(payload.get("runtimeRevision"), 0),
+        )
+        snapshot.layout_revision = max(
+            0,
+            self._safe_int(payload.get("layoutRevision"), 0),
         )
         snapshot.apply_state = str(payload.get("apply") or "UNKNOWN")
         snapshot.config_dirty = bool(payload.get("dirty", False))

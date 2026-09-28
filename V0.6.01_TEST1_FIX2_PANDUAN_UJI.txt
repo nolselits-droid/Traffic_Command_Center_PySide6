@@ -1,0 +1,32 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX2
+================================================================
+
+1. Jalankan aplikasi dengan:
+
+     python main.py
+
+2. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+3. Uji pada window normal, window minimum, dan kondisi maximize.
+
+HASIL YANG BENAR
+----------------
+- Panel menu kiri tidak menimpa panel kanan.
+- Tidak ada field, tombol, atau tulisan yang saling menimpa.
+- Tidak muncul scroll horizontal.
+- Live Preview menampilkan keseluruhan diagram jalan.
+- Diagram tetap persegi, tidak melebar atau gepeng.
+- Pada window sempit ukuran diagram mengecil secara proporsional.
+- Pada window lebar ukuran diagram membesar otomatis.
+- RELOAD FROM CONTROLLER, RESET SG POSITIONS, dan SAVE INTERSECTION LAYOUT
+  tersusun vertikal dan terlihat penuh.
+- Signal Group Identification tersusun satu kolom dan dapat digulir.
+
+UJI FUNGSI
+----------
+1. Tekan RELOAD FROM CONTROLLER.
+2. Ubah Diagram Type atau posisi salah satu SG.
+3. Tekan SAVE INTERSECTION LAYOUT.
+4. Muat ulang dan pastikan perubahan tetap tersimpan.
+5. Ubah nama SG dan tekan SAVE SG NAMES.
+
+Perbaikan ini hanya mengubah UI. Data dan logika controller tidak berubah.

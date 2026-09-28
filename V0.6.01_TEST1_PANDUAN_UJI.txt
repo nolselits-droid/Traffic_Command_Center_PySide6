@@ -1,0 +1,195 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1
+================================================
+
+TUJUAN
+------
+Menguji sinkronisasi Intersection Layout antara Traffic Command Center dan
+Traffic Light Controller ESP32-S3 V1.24 TEST4. Controller menjadi sumber data
+utama. Command Center hanya menyimpan cache layout untuk tampilan ketika
+controller tidak dapat dihubungi. Camera Layout tetap disimpan lokal di PC.
+
+
+PERSIAPAN
+----------
+1. Gunakan firmware ESP32-S3 V1.24 TEST4 yang sudah mendukung:
+   - GET  /api/intersection/layout
+   - POST /api/intersection/layout
+   - layoutRevision dan expectedRevision
+2. Pastikan PC dan controller berada pada jaringan yang sama.
+3. Pastikan controller tampil ONLINE pada Command Center.
+4. Simpan backup controller sebelum mengubah layout operasional.
+5. Jalankan aplikasi dari lingkungan virtual yang biasa digunakan:
+
+   python main.py
+
+
+UJI 1 - MEMUAT LAYOUT DARI CONTROLLER
+-------------------------------------
+1. Buka SYSTEM SETTINGS.
+2. Pilih controller yang akan diuji.
+3. Buka tab INTERSECTION LAYOUT.
+4. Tunggu hingga status di kanan atas Live Preview menampilkan:
+   - CONTROLLER / NVS atau CONTROLLER / DEFAULT
+   - SCHEMA 2
+   - REV dengan angka lebih besar dari 0
+5. Bandingkan Diagram Type, Diagram Rotation, Road Arm, penempatan SG, dan
+   nama SG dengan halaman System / Intersection Layout pada ESP32-S3.
+
+Hasil yang diharapkan:
+- Layout pada Command Center sama dengan layout pada ESP32-S3.
+- Tombol SAVE INTERSECTION LAYOUT aktif setelah layout berhasil dimuat.
+- Tab SIGNAL GROUP NAMES yang lama tidak ada lagi.
+- Signal Group Identification berada di bawah Live Preview pada tab
+  INTERSECTION LAYOUT.
+
+
+UJI 2 - KESESUAIAN SUSUNAN MENU
+-------------------------------
+Pastikan bagian kiri editor berurutan sebagai berikut:
+
+1. INTERSECTION DIAGRAM
+   A. DIAGRAM / LAYOUT
+      - Diagram Type
+      - Diagram Rotation
+   B. ROAD ARM
+      - Selected Road Arm
+      - Arm Angle
+      - Flow Direction
+
+2. SIGNAL GROUP CONFIGURATION
+   - Selected SG
+   - Assigned Road Arm
+   - Lane Position
+   - SG Rotation
+   - Destination Road Arms
+
+3. Tombol:
+   - RELOAD
+   - RESET SG POSITIONS
+   - SAVE INTERSECTION LAYOUT
+
+Hasil yang diharapkan:
+- Nama menu dan susunannya konsisten dengan dashboard ESP32-S3.
+- Selected Road Arm dan Assigned Road Arm menampilkan nomor Arm, arah aktual,
+  dan sudut aktual, misalnya "Arm 1 - North (0 derajat)".
+
+
+UJI 3 - DIAGRAM ROTATION
+------------------------
+1. Catat posisi SG dan nama SG sebelum perubahan.
+2. Ubah Diagram Rotation dari 0 derajat ke 90 derajat.
+3. Amati Live Preview sebelum menyimpan.
+
+Hasil yang diharapkan:
+- Jalan, posisi lampu SG, rotasi lampu SG yang diatur manual, dan posisi nama
+  SG ikut berputar 90 derajat.
+- NORTH tetap di atas, EAST tetap di kanan, SOUTH tetap di bawah, dan WEST
+  tetap di kiri.
+- Arm Angle menampilkan sudut aktual setelah rotation diterapkan.
+- Status menunjukkan perubahan belum disimpan.
+
+
+UJI 4 - POSISI LAMPU DAN NAMA SG
+--------------------------------
+1. Pilih salah satu SG aktif.
+2. Geser kotak lampu SG ke posisi baru.
+3. Geser kotak nama SG berwarna orange ke posisi lain.
+4. Tekan SAVE INTERSECTION LAYOUT.
+5. Tunggu sampai layout dimuat ulang dan revision bertambah.
+6. Buka dashboard ESP32-S3 dan bandingkan posisi lampu serta nama SG.
+7. Tutup dan buka kembali Command Center.
+
+Hasil yang diharapkan:
+- Posisi lampu dan posisi nama dapat diatur secara terpisah.
+- Penyimpanan berhasil tanpa Safe Apply.
+- layoutRevision bertambah.
+- Dashboard ESP32-S3, Command Center Live Preview, dan Live View menampilkan
+  posisi yang sama.
+- Posisi tetap tersimpan setelah aplikasi dibuka ulang.
+
+
+UJI 5 - SIGNAL GROUP IDENTIFICATION
+-----------------------------------
+1. Pada bagian Signal Group Identification, ubah nama SG1 dan SG2.
+2. Pastikan nama baru langsung terlihat pada Live Preview.
+3. Tekan SAVE SG NAMES.
+4. Tunggu notifikasi berhasil.
+5. Periksa Overview, Live View, Traffic Configuration, dan dashboard ESP32-S3.
+
+Hasil yang diharapkan:
+- Nama SG disimpan di controller, bukan hanya di PC.
+- Nama yang sama digunakan pada semua tampilan.
+- Penyimpanan nama SG tidak membutuhkan Safe Apply.
+- Nama SG maksimum 40 karakter.
+
+
+UJI 6 - KONFLIK LAYOUT REVISION
+-------------------------------
+1. Muat Intersection Layout pada Command Center.
+2. Buka halaman Intersection Layout ESP32-S3 melalui browser.
+3. Ubah dan simpan layout dari browser sehingga layoutRevision bertambah.
+4. Tanpa menekan RELOAD pada Command Center, ubah layout pada Command Center.
+5. Tekan SAVE INTERSECTION LAYOUT.
+
+Hasil yang diharapkan:
+- Controller menolak penyimpanan lama dengan HTTP 409 Conflict.
+- Command Center menampilkan peringatan bahwa layout sudah berubah.
+- Perubahan baru pada controller tidak tertimpa.
+- Setelah menekan RELOAD, layout terbaru tampil dan dapat diedit kembali.
+
+
+UJI 7 - CACHE OFFLINE
+---------------------
+1. Saat controller ONLINE, tunggu layout berhasil dimuat.
+2. Tutup aplikasi.
+3. Putuskan kabel jaringan controller atau matikan koneksi PC ke controller.
+4. Buka kembali aplikasi dan masuk ke INTERSECTION LAYOUT.
+
+Hasil yang diharapkan:
+- Layout terakhir masih dapat dilihat dari cache.
+- Status menunjukkan CACHE / OFFLINE.
+- Tombol edit dan SAVE INTERSECTION LAYOUT tidak aktif.
+- Cache tidak pernah dikirim ke controller sebelum layout terbaru berhasil
+  dimuat kembali dari controller.
+
+
+UJI 8 - LIVE VIEW DAN CAMERA LAYOUT
+-----------------------------------
+1. Buka LIVE VIEW dan perhatikan Intersection Diagram.
+2. Simpan perubahan layout dari halaman ESP32-S3 atau Command Center.
+3. Tunggu sinkronisasi otomatis.
+4. Pastikan stream kamera sedang aktif.
+5. Buka SYSTEM SETTINGS / CAMERA LAYOUT dan ubah susunan kamera.
+
+Hasil yang diharapkan:
+- Live View mengikuti layout terbaru dari controller.
+- Sinkronisasi Intersection Layout tidak menghentikan atau me-restart stream
+  kamera yang sedang berjalan.
+- Camera Layout tetap dapat disimpan lokal dan tidak mengubah ESP32-S3.
+
+
+UJI 9 - REGRESI FITUR UTAMA
+---------------------------
+Pastikan fungsi berikut tetap berjalan:
+
+1. Overview dan status controller.
+2. Live View dan kamera RTSP.
+3. SKIP, HOLD, dan FLASHING.
+4. Traffic Configuration Plan, Stage, Schedule, dan Holiday.
+5. Backup dan Restore.
+6. Event dan Alarm.
+7. Identity & Operational, Startup Pattern, RTC, dan Network information.
+8. Camera Layout AUTO dan CUSTOM.
+
+
+KRITERIA LULUS
+--------------
+Versi dinyatakan lulus apabila:
+
+1. Controller menjadi satu-satunya sumber Intersection Layout saat ONLINE.
+2. Command Center dan dashboard ESP32-S3 menampilkan layout yang sama.
+3. Signal Group Names tersimpan pada controller dan tampil konsisten.
+4. Konflik revision tidak menimpa data baru.
+5. Cache offline hanya digunakan untuk tampilan.
+6. Sinkronisasi layout tidak mengganggu traffic runtime maupun stream kamera.
+7. Seluruh uji regresi berjalan normal.

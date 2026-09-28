@@ -160,7 +160,7 @@ class CameraTile(QFrame):
         if self.player.play(
             self.screen,
             url,
-            caching_ms=1400,
+            caching_ms=self.camera.rtsp_cache_ms,
             username=self.camera.username,
             password=self.camera.password,
         ):
@@ -253,6 +253,7 @@ class LiveView(QWidget):
         self._control_busy = False
         self._pending_control_text = ""
         self.streaming_active = False
+        self._intersection_snapshot_signature: tuple[object, ...] | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 18)
@@ -405,8 +406,14 @@ class LiveView(QWidget):
         self.control_service.completed.connect(self._control_completed)
         self.control_service.failed.connect(self._control_failed)
         self.control_service.busy_changed.connect(self._control_busy_changed)
-        self.service.display_layout_repository.layout_changed.connect(
+        self.service.display_layout_repository.intersection_changed.connect(
+            self._intersection_layout_changed
+        )
+        self.service.display_layout_repository.camera_changed.connect(
             self._display_layout_changed
+        )
+        self.service.camera_configuration_changed.connect(
+            self._camera_configuration_changed
         )
         self._controllers_changed()
 
@@ -449,6 +456,7 @@ class LiveView(QWidget):
 
         if not self.service.controllers:
             self.current_controller_id = ""
+            self._intersection_snapshot_signature = None
             self.title.setText("No Controller Configured")
             self.subtitle.setText(
                 "Buka CONTROLLERS untuk mengaktifkan koneksi ESP32-S3."
@@ -504,6 +512,14 @@ class LiveView(QWidget):
             display_layout.intersection
         )
         self.intersection_diagram.set_signal_groups(snapshot.signal_groups)
+        self._intersection_snapshot_signature = (
+            snapshot.controller_id,
+            snapshot.active_signal_groups,
+            tuple(
+                (item.number, item.name)
+                for item in snapshot.signal_groups
+            ),
+        )
         self._update_extra_signal_text(snapshot)
         self._apply_snapshot(snapshot)
 
@@ -806,6 +822,45 @@ class LiveView(QWidget):
         self.intersection_diagram.set_signal_groups(snapshot.signal_groups)
         self._rebuild_cameras(snapshot)
 
+    def _camera_configuration_changed(
+        self,
+        controller_id: str,
+        camera_id: str,
+    ) -> None:
+        if controller_id != self.current_controller_id:
+            return
+        tile = next(
+            (
+                item
+                for item in self.camera_tiles
+                if item.camera.camera_id == camera_id
+            ),
+            None,
+        )
+        if tile is None:
+            snapshot = self.service.get_controller(controller_id)
+            if snapshot is not None:
+                self._rebuild_cameras(snapshot)
+            return
+        tile.stop(emit_status=False)
+        tile.refresh()
+        if self.streaming_active:
+            tile.start()
+
+    def _intersection_layout_changed(self, controller_id: str) -> None:
+        if controller_id != self.current_controller_id:
+            return
+        snapshot = self.service.get_controller(controller_id)
+        if snapshot is None:
+            return
+        layout = self.service.display_layout_repository.get(
+            controller_id,
+            snapshot.active_signal_groups,
+            snapshot.cameras,
+        )
+        self.intersection_diagram.set_layout_config(layout.intersection)
+        self.intersection_diagram.set_signal_groups(snapshot.signal_groups)
+
     def _snapshot_updated(self, controller_id: str) -> None:
         if controller_id != self.current_controller_id:
             return
@@ -817,6 +872,17 @@ class LiveView(QWidget):
                     index,
                     f"{snapshot.controller_id} · {snapshot.name}",
                 )
+            signature = (
+                snapshot.controller_id,
+                snapshot.active_signal_groups,
+                tuple(
+                    (item.number, item.name)
+                    for item in snapshot.signal_groups
+                ),
+            )
+            if signature != self._intersection_snapshot_signature:
+                self._intersection_snapshot_signature = signature
+                self._intersection_layout_changed(controller_id)
             self._apply_snapshot(snapshot)
 
     def _update_control_buttons(self, snapshot: ControllerSnapshot) -> None:

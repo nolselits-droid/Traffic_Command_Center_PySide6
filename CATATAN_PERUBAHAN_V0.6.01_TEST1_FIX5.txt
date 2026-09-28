@@ -1,0 +1,48 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX5
+================================================================
+
+FORM SATU BARIS
+---------------
+Field berikut sekarang memakai susunan label dan nilai pada baris yang sama:
+
+INTERSECTION DIAGRAM
+- Diagram Type
+- Diagram Rotation
+- Selected Road Arm
+- Arm Angle
+- Flow Direction
+
+SIGNAL GROUP CONFIGURATION
+- Selected SG
+- Assigned Road Arm
+- Lane Position
+- SG Rotation
+- Destination Road Arms
+
+Kolom label mempunyai lebar minimum 165 px. Kolom nilai memakai seluruh ruang
+yang tersisa pada panel kiri 40%.
+
+ARAH MATA ANGIN
+---------------
+- NORTH berada di luar sisi atas kanvas.
+- SOUTH berada di luar sisi bawah kanvas.
+- WEST berada di luar sisi kiri kanvas.
+- EAST berada di luar sisi kanan kanvas.
+- Label ARM tetap berada di dalam gambar dan tidak lagi bertumpuk dengan label
+  arah mata angin.
+
+STABILISASI REFRESH
+-------------------
+- Refresh otomatis setiap pembaruan status dijalankan secara silent.
+- Refresh otomatis tidak menonaktifkan tombol SAVE.
+- Refresh otomatis tidak mengubah status editable Live Preview.
+- RELOAD FROM CONTROLLER yang ditekan operator tetap menampilkan busy state.
+- SAVE tetap menonaktifkan tombol selama request berjalan.
+- Jika layoutRevision dan isi layout sama, editor hanya memperbarui metadata
+  tanpa menggambar ulang preview.
+- set_layout_config, set_signal_groups, dan set_editable tidak repaint jika
+  nilainya tidak berubah.
+- SG yang benar-benar FLASH YELLOW tetap dianimasikan; hanya aspek lampunya
+  yang dimaksudkan berubah.
+
+Perbaikan sinkronisasi SAVE ke Live View dari FIX4 tetap dipertahankan.

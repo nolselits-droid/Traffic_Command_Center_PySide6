@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -27,12 +31,105 @@ from ..display_layout import (
     default_road_arms,
     default_signal_placements,
     destination_ids_for_movements,
+    effective_arm_angle,
     movement_name_between,
     automatic_camera_positions,
 )
-from ..models import CameraConfiguration, CameraRole
+from ..models import CameraConfiguration, CameraRole, SignalGroupState
 from ..widgets.common import muted_label, status_label
 from ..widgets.intersection_diagram import IntersectionDiagram
+
+
+def _direction_name(angle: float) -> str:
+    names = (
+        "North",
+        "North-East",
+        "East",
+        "South-East",
+        "South",
+        "South-West",
+        "West",
+        "North-West",
+    )
+    return names[round((float(angle) % 360.0) / 45.0) % 8]
+
+
+def _arm_number(arm, index: int) -> int:
+    digits = "".join(character for character in arm.arm_id if character.isdigit())
+    return int(digits) if digits else index + 1
+
+
+def _arm_display(arm, index: int, rotation: int) -> str:
+    number = _arm_number(arm, index)
+    angle = effective_arm_angle(arm, rotation)
+    angle_text = (
+        str(int(round(angle)))
+        if abs(angle - round(angle)) < 0.05
+        else f"{angle:.1f}"
+    )
+    return f"Arm {number} — {_direction_name(angle)} ({angle_text}°)"
+
+
+def _destination_movement(source, destination) -> str:
+    movement = movement_name_between(source, destination)
+    if "Left" in movement:
+        return "Left"
+    if "Right" in movement:
+        return "Right"
+    return "Straight"
+
+
+def _destination_sort_key(
+    source,
+    destination,
+    index: int,
+) -> tuple[int, float, int]:
+    movement = _destination_movement(source, destination)
+    rank = {"Straight": 0, "Left": 1, "Right": 2}[movement]
+    inbound_heading = (float(source.angle) + 180.0) % 360.0
+    delta = (
+        (float(destination.angle) - inbound_heading + 180.0) % 360.0
+    ) - 180.0
+    return rank, abs(delta), _arm_number(destination, index)
+
+
+class IntersectionLayoutPreview(IntersectionDiagram):
+    """Square editor preview that never stretches into a wide banner."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.set_compass_labels_visible(False)
+        self.setMinimumSize(260, 260)
+        self.setMaximumSize(520, 520)
+        policy = QSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Preferred,
+        )
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802
+        return max(260, min(520, int(width)))
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return QSize(460, 460)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(260, 260)
+
+
+class VerticalScrollArea(QScrollArea):
+    """Vertical-only scroll area whose content always fits the viewport width."""
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        content = self.widget()
+        if content is not None:
+            content.setFixedWidth(max(0, self.viewport().width()))
+        self.horizontalScrollBar().setValue(0)
 
 
 class CameraPreviewTile(QLabel):
@@ -158,7 +255,10 @@ class CameraLayoutPreview(QFrame):
 
 
 class DisplayLayoutEditor(QWidget):
-    """Local presentation editor shared by System Settings and Live View."""
+    """Controller Intersection Layout and local Camera Layout editor."""
+
+    intersection_saved = Signal(str, str)
+    intersection_failed = Signal(str, str)
 
     def __init__(
         self,
@@ -177,22 +277,27 @@ class DisplayLayoutEditor(QWidget):
         self._loading = False
         self._camera_rows: dict[str, dict[str, QWidget]] = {}
         self._destination_checks: dict[str, QCheckBox] = {}
+        self._layout_schema = 0
+        self._layout_revision = 0
+        self._layout_source = "CACHE / OFFLINE"
+        self._layout_busy = False
+        self._intersection_dirty = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
-        intro = QLabel(
-            "Layout disimpan lokal untuk setiap controller. Pengaturan ini hanya "
-            "mengubah tampilan Command Center dan tidak mengubah Plan, Stage, "
-            "Schedule, output SG, atau safety controller."
-        )
-        intro.setObjectName("readOnlyNote")
-        intro.setWordWrap(True)
-        root.addWidget(intro)
-
         if self.section == "intersection":
             root.addWidget(self._build_intersection_panel(), 1)
+            self.layout_service = service.intersection_layout_service
+            self.layout_service.layout_loaded.connect(self._layout_loaded)
+            self.layout_service.save_completed.connect(
+                self._layout_save_completed
+            )
+            self.layout_service.request_failed.connect(
+                self._layout_request_failed
+            )
+            self.layout_service.busy_changed.connect(self._layout_busy_changed)
         else:
             root.addWidget(self._build_camera_panel(), 1)
 
@@ -211,10 +316,23 @@ class DisplayLayoutEditor(QWidget):
         layout.setContentsMargins(14, 12, 14, 14)
         layout.setSpacing(12)
 
+        settings_scroll = VerticalScrollArea()
+        settings_scroll.setObjectName("intersectionSettingsScroll")
+        settings_scroll.setWidgetResizable(True)
+        settings_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        settings_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        settings_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        settings_scroll.horizontalScrollBar().valueChanged.connect(
+            lambda _value: settings_scroll.horizontalScrollBar().setValue(0)
+        )
+        settings_scroll.setMinimumWidth(390)
+
         settings = QFrame()
         settings.setObjectName("summaryPanel")
-        settings.setMinimumWidth(330)
-        settings.setMaximumWidth(420)
         settings_layout = QVBoxLayout(settings)
         settings_layout.setContentsMargins(12, 10, 12, 12)
         settings_layout.setSpacing(9)
@@ -227,39 +345,76 @@ class DisplayLayoutEditor(QWidget):
         diagram_title.setObjectName("layoutGroupTitle")
         diagram_layout.addWidget(diagram_title)
 
+        diagram_subtitle = muted_label("DIAGRAM / LAYOUT")
+        diagram_subtitle.setObjectName("layoutSubgroupTitle")
+        diagram_layout.addWidget(diagram_subtitle)
+
         diagram_controls = QGridLayout()
         diagram_controls.setHorizontalSpacing(8)
         diagram_controls.setVerticalSpacing(7)
         diagram_controls.addWidget(QLabel("Diagram Type"), 0, 0)
         self.intersection_type_input = QComboBox()
+        self.intersection_type_input.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.intersection_type_input.setMinimumContentsLength(9)
         for key, name in INTERSECTION_TYPES.items():
             self.intersection_type_input.addItem(name, key)
         self.intersection_type_input.currentIndexChanged.connect(
             self._intersection_template_changed
         )
         diagram_controls.addWidget(self.intersection_type_input, 0, 1)
-        diagram_controls.addWidget(QLabel("Rotation"), 1, 0)
+        diagram_controls.addWidget(QLabel("Diagram Rotation"), 1, 0)
         self.rotation_input = QComboBox()
-        for value in (0, 90, 180, 270):
-            self.rotation_input.addItem(f"{value}°", value)
+        self.rotation_input.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.rotation_input.setMinimumContentsLength(9)
+        for value, text in (
+            (0, "0° — Original"),
+            (90, "90° — Rotate Clockwise"),
+            (180, "180° — Rotate Half Turn"),
+            (270, "270° — Rotate Counterclockwise"),
+        ):
+            self.rotation_input.addItem(text, value)
         self.rotation_input.currentIndexChanged.connect(
             self._intersection_template_changed
         )
         diagram_controls.addWidget(self.rotation_input, 1, 1)
-        diagram_controls.addWidget(QLabel("Selected Road Arm"), 2, 0)
+        diagram_controls.setColumnMinimumWidth(0, 165)
+        diagram_controls.setColumnStretch(1, 1)
+        diagram_layout.addLayout(diagram_controls)
+
+        arm_subtitle = muted_label("ROAD ARM")
+        arm_subtitle.setObjectName("layoutSubgroupTitle")
+        diagram_layout.addWidget(arm_subtitle)
+        arm_controls = QGridLayout()
+        arm_controls.setHorizontalSpacing(8)
+        arm_controls.setVerticalSpacing(7)
+        arm_controls.addWidget(QLabel("Selected Road Arm"), 0, 0)
         self.road_arm_selector = QComboBox()
+        self.road_arm_selector.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.road_arm_selector.setMinimumContentsLength(9)
         self.road_arm_selector.currentIndexChanged.connect(
             self._selected_arm_changed
         )
-        diagram_controls.addWidget(self.road_arm_selector, 2, 1)
-        diagram_controls.addWidget(QLabel("Arm Angle"), 3, 0)
-        self.arm_angle_input = QSpinBox()
-        self.arm_angle_input.setRange(0, 359)
+        arm_controls.addWidget(self.road_arm_selector, 0, 1)
+        arm_controls.addWidget(QLabel("Arm Angle"), 1, 0)
+        self.arm_angle_input = QDoubleSpinBox()
+        self.arm_angle_input.setRange(0.0, 359.9)
+        self.arm_angle_input.setDecimals(1)
+        self.arm_angle_input.setSingleStep(0.1)
         self.arm_angle_input.setSuffix("°")
         self.arm_angle_input.valueChanged.connect(self._road_arm_changed)
-        diagram_controls.addWidget(self.arm_angle_input, 3, 1)
-        diagram_controls.addWidget(QLabel("Flow Direction"), 4, 0)
+        arm_controls.addWidget(self.arm_angle_input, 1, 1)
+        arm_controls.addWidget(QLabel("Flow Direction"), 2, 0)
         self.arm_flow_input = QComboBox()
+        self.arm_flow_input.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.arm_flow_input.setMinimumContentsLength(9)
         for key, name in FLOW_DIRECTIONS.items():
             self.arm_flow_input.addItem(name, key)
         self.arm_flow_input.setToolTip(
@@ -269,9 +424,10 @@ class DisplayLayoutEditor(QWidget):
         self.arm_flow_input.currentIndexChanged.connect(
             self._road_arm_changed
         )
-        diagram_controls.addWidget(self.arm_flow_input, 4, 1)
-        diagram_controls.setColumnStretch(1, 1)
-        diagram_layout.addLayout(diagram_controls)
+        arm_controls.addWidget(self.arm_flow_input, 2, 1)
+        arm_controls.setColumnMinimumWidth(0, 165)
+        arm_controls.setColumnStretch(1, 1)
+        diagram_layout.addLayout(arm_controls)
         settings_layout.addWidget(diagram_frame)
 
         signal_frame = QFrame()
@@ -288,12 +444,20 @@ class DisplayLayoutEditor(QWidget):
         signal_controls.setVerticalSpacing(7)
         signal_controls.addWidget(QLabel("Selected SG"), 0, 0)
         self.sg_selector = QComboBox()
+        self.sg_selector.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.sg_selector.setMinimumContentsLength(9)
         self.sg_selector.currentIndexChanged.connect(
             self._selected_sg_changed
         )
         signal_controls.addWidget(self.sg_selector, 0, 1)
         signal_controls.addWidget(QLabel("Assigned Road Arm"), 1, 0)
         self.assigned_arm_input = QComboBox()
+        self.assigned_arm_input.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.assigned_arm_input.setMinimumContentsLength(9)
         self.assigned_arm_input.currentIndexChanged.connect(
             self._sg_visual_changed
         )
@@ -307,6 +471,10 @@ class DisplayLayoutEditor(QWidget):
         signal_controls.addWidget(self.lane_position_input, 2, 1)
         signal_controls.addWidget(QLabel("SG Rotation"), 3, 0)
         self.sg_rotation_input = QComboBox()
+        self.sg_rotation_input.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.sg_rotation_input.setMinimumContentsLength(7)
         self.sg_rotation_input.addItem("Auto", -1)
         for value in (0, 90, 180, 270):
             self.sg_rotation_input.addItem(f"{value}°", value)
@@ -314,64 +482,184 @@ class DisplayLayoutEditor(QWidget):
             self._sg_visual_changed
         )
         signal_controls.addWidget(self.sg_rotation_input, 3, 1)
-        movement_label = QLabel("Destination Arms")
+        movement_label = QLabel("Destination Road Arm:")
         movement_label.setToolTip(
             "Pilih satu atau beberapa road arm tujuan yang dikendalikan SG ini."
         )
-        signal_controls.addWidget(movement_label, 4, 0)
+        movement_label.setContentsMargins(0, 3, 0, 0)
+        signal_controls.addWidget(
+            movement_label,
+            4,
+            0,
+            Qt.AlignmentFlag.AlignTop,
+        )
         movement_widget = QWidget()
         self.destination_layout = QGridLayout(movement_widget)
         self.destination_layout.setContentsMargins(0, 0, 0, 0)
-        self.destination_layout.setHorizontalSpacing(8)
         self.destination_layout.setVerticalSpacing(3)
+        self.destination_layout.setColumnStretch(0, 1)
         signal_controls.addWidget(movement_widget, 4, 1)
+        signal_controls.setColumnMinimumWidth(0, 165)
         signal_controls.setColumnStretch(1, 1)
         signal_layout.addLayout(signal_controls)
         settings_layout.addWidget(signal_frame)
-        settings_layout.addStretch(1)
 
-        actions = QHBoxLayout()
+        actions = QVBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(6)
-        reset = QPushButton("RESET SG POSITIONS")
-        reset.setFixedHeight(30)
-        reset.setStyleSheet("font-size: 9pt; padding: 3px 7px;")
-        reset.clicked.connect(self._reset_intersection)
-        save = QPushButton("SAVE INTERSECTION LAYOUT")
-        save.setObjectName("primaryButton")
-        save.setFixedHeight(30)
-        save.setStyleSheet("font-size: 9pt; padding: 3px 7px;")
-        save.clicked.connect(self._save_intersection)
-        actions.addWidget(reset, 4)
-        actions.addWidget(save, 5)
+        secondary_actions = QHBoxLayout()
+        secondary_actions.setContentsMargins(0, 0, 0, 0)
+        secondary_actions.setSpacing(6)
+        self.reload_intersection_button = QPushButton(
+            "RELOAD FROM CONTROLLER"
+        )
+        self.reload_intersection_button.setFixedHeight(30)
+        self.reload_intersection_button.setStyleSheet(
+            "font-size: 8pt; padding: 3px 5px;"
+        )
+        self.reload_intersection_button.clicked.connect(
+            self._reload_intersection
+        )
+        self.reset_intersection_button = QPushButton("RESET SG POSITIONS")
+        self.reset_intersection_button.setFixedHeight(30)
+        self.reset_intersection_button.setStyleSheet(
+            "font-size: 8pt; padding: 3px 5px;"
+        )
+        self.reset_intersection_button.clicked.connect(self._reset_intersection)
+        self.save_intersection_button = QPushButton(
+            "SAVE INTERSECTION LAYOUT"
+        )
+        self.save_intersection_button.setObjectName("primaryButton")
+        self.save_intersection_button.setFixedHeight(30)
+        self.save_intersection_button.setStyleSheet(
+            "font-size: 9pt; padding: 3px 7px;"
+        )
+        self.save_intersection_button.clicked.connect(self._save_intersection)
+        secondary_actions.addWidget(self.reload_intersection_button, 1)
+        secondary_actions.addWidget(self.reset_intersection_button, 1)
+        actions.addLayout(secondary_actions)
+        actions.addWidget(self.save_intersection_button)
         settings_layout.addLayout(actions)
-        layout.addWidget(settings, 0)
+        settings_layout.addStretch(1)
+        settings_scroll.setWidget(settings)
+        layout.addWidget(settings_scroll, 33)
+
+        preview_scroll = VerticalScrollArea()
+        preview_scroll.setObjectName("intersectionPreviewScroll")
+        preview_scroll.setWidgetResizable(True)
+        preview_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        preview_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        preview_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        preview_scroll.horizontalScrollBar().valueChanged.connect(
+            lambda _value: preview_scroll.horizontalScrollBar().setValue(0)
+        )
+        preview_scroll.setMinimumWidth(400)
 
         preview_panel = QFrame()
         preview_panel.setObjectName("summaryPanel")
+        preview_panel.setMinimumWidth(0)
         preview_layout = QVBoxLayout(preview_panel)
         preview_layout.setContentsMargins(12, 10, 12, 10)
         preview_layout.setSpacing(6)
-        preview_title = QLabel("Intersection Diagram")
+        preview_header = QHBoxLayout()
+        preview_title = QLabel("Live Preview")
         preview_title.setObjectName("sectionTitle")
-        preview_layout.addWidget(preview_title)
+        preview_header.addWidget(preview_title)
+        preview_header.addStretch()
+        self.layout_meta_label = muted_label("CACHE / OFFLINE · REV —")
+        preview_header.addWidget(self.layout_meta_label)
+        preview_layout.addLayout(preview_header)
 
-        self.intersection_preview = IntersectionDiagram()
-        self.intersection_preview.setMinimumSize(380, 380)
+        self.intersection_preview = IntersectionLayoutPreview()
         self.intersection_preview.set_editable(True)
         self.intersection_preview.placement_changed.connect(
             self._intersection_placement_changed
         )
+        self.intersection_preview.label_offset_changed.connect(
+            self._intersection_label_changed
+        )
         self.intersection_preview.signal_selected.connect(
             self._preview_signal_selected
         )
-        preview_layout.addWidget(self.intersection_preview, 1)
+
+        compass_frame = QFrame()
+        compass_frame.setObjectName("externalCompassFrame")
+        compass_layout = QGridLayout(compass_frame)
+        compass_layout.setContentsMargins(2, 2, 2, 2)
+        compass_layout.setHorizontalSpacing(6)
+        compass_layout.setVerticalSpacing(3)
+
+        north_label = QLabel("NORTH")
+        south_label = QLabel("SOUTH")
+        west_label = QLabel("WEST")
+        east_label = QLabel("EAST")
+        for label in (
+            north_label,
+            south_label,
+            west_label,
+            east_label,
+        ):
+            label.setObjectName("externalCompassLabel")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        compass_layout.addWidget(north_label, 0, 1)
+        compass_layout.addWidget(west_label, 1, 0)
+        compass_layout.addWidget(self.intersection_preview, 1, 1)
+        compass_layout.addWidget(east_label, 1, 2)
+        compass_layout.addWidget(south_label, 2, 1)
+        compass_layout.setColumnStretch(1, 1)
+        compass_layout.setRowStretch(1, 1)
+        preview_layout.addWidget(
+            compass_frame,
+            0,
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+        )
         hint = muted_label(
-            "Drag SG1–SG12 directly in the preview. Road-arm assignment and "
-            "vehicle destinations remain independent from SG display position."
+            "Drag lampu SG untuk mengubah posisi lampu. Drag nama SG untuk "
+            "mengubah posisi label secara terpisah."
         )
         hint.setWordWrap(True)
         preview_layout.addWidget(hint)
-        layout.addWidget(preview_panel, 1)
+
+        names_frame = QFrame()
+        names_frame.setObjectName("layoutSettingsGroup")
+        names_layout = QVBoxLayout(names_frame)
+        names_layout.setContentsMargins(8, 7, 8, 8)
+        names_layout.setSpacing(4)
+        names_title = QLabel("Signal Group Identification")
+        names_title.setObjectName("layoutGroupTitle")
+        names_layout.addWidget(names_title)
+        names_grid = QGridLayout()
+        names_grid.setHorizontalSpacing(6)
+        names_grid.setVerticalSpacing(2)
+        self.sg_name_inputs: list[QLineEdit] = []
+        for index in range(12):
+            label = QLabel(f"SG{index + 1}")
+            field = QLineEdit()
+            field.setFixedHeight(26)
+            field.setMaxLength(40)
+            field.setPlaceholderText(f"Signal Group {index + 1}")
+            field.textChanged.connect(self._sg_name_preview_changed)
+            self.sg_name_inputs.append(field)
+            names_grid.addWidget(label, index, 0)
+            names_grid.addWidget(field, index, 1)
+        names_grid.setColumnStretch(1, 1)
+        names_layout.addLayout(names_grid)
+        self.save_sg_names_button = QPushButton("SAVE SG NAMES")
+        self.save_sg_names_button.setProperty("systemAction", True)
+        self.save_sg_names_button.setProperty("actionRole", "confirm")
+        names_layout.addWidget(
+            self.save_sg_names_button,
+            0,
+            Qt.AlignmentFlag.AlignLeft,
+        )
+        preview_layout.addWidget(names_frame)
+        preview_scroll.setWidget(preview_panel)
+        layout.addWidget(preview_scroll, 67)
         return panel
 
     def _build_camera_panel(self) -> QFrame:
@@ -487,6 +775,10 @@ class DisplayLayoutEditor(QWidget):
         self._loading = True
         try:
             if self.section == "intersection":
+                self._intersection_dirty = False
+                self._layout_schema = 0
+                self._layout_revision = 0
+                self._layout_source = "CACHE / OFFLINE"
                 type_index = self.intersection_type_input.findData(
                     self._layout.intersection.diagram_type
                 )
@@ -499,15 +791,28 @@ class DisplayLayoutEditor(QWidget):
                 self.intersection_preview.set_layout_config(
                     self._layout.intersection
                 )
-                self.intersection_preview.set_signal_groups(snapshot.signal_groups)
+                self.intersection_preview.set_signal_groups(
+                    self._editor_signal_groups(snapshot)
+                )
                 self.sg_selector.clear()
-                for signal_group in snapshot.signal_groups:
+                known = {item.number: item for item in snapshot.signal_groups}
+                for number in range(
+                    1,
+                    max(1, snapshot.active_signal_groups) + 1,
+                ):
+                    signal_group = known.get(number)
+                    name = (
+                        signal_group.name
+                        if signal_group is not None
+                        else f"Signal Group {number}"
+                    )
                     self.sg_selector.addItem(
-                        f"SG{signal_group.number} · {signal_group.name}",
-                        signal_group.number,
+                        f"SG{number} · {name}",
+                        number,
                     )
                 if self.sg_selector.count():
                     self.sg_selector.setCurrentIndex(0)
+                self._update_layout_meta()
             else:
                 mode_index = self.camera_mode_input.findData(
                     self._layout.cameras.mode
@@ -530,9 +835,214 @@ class DisplayLayoutEditor(QWidget):
         if self.section == "intersection":
             self._selected_arm_changed()
             self._selected_sg_changed()
+            self._update_intersection_controls()
+            QTimer.singleShot(
+                300,
+                lambda key=controller_id: self.layout_service.refresh(
+                    key,
+                    force=True,
+                    interactive=False,
+                ),
+            )
         else:
             self._camera_mode_changed()
             self._refresh_camera_preview()
+
+    def _layout_loaded(
+        self,
+        controller_id: str,
+        layout: object,
+        schema_version: int,
+        revision: int,
+        source: str,
+    ) -> None:
+        if (
+            self.section != "intersection"
+            or controller_id != self.controller_id
+            or not hasattr(layout, "placements")
+        ):
+            return
+        snapshot = self.service.get_controller(controller_id)
+        if snapshot is None:
+            return
+        if self._intersection_dirty:
+            if revision == self._layout_revision:
+                return
+            self._set_message(
+                "CONTROLLER LAYOUT CHANGED · UNSAVED EDITS PRESERVED · "
+                "REOPEN CONTROLLER BEFORE SAVING",
+                "warning",
+            )
+            return
+        if (
+            revision == self._layout_revision
+            and layout == self._layout.intersection
+        ):
+            self._layout_schema = schema_version
+            self._layout_source = source
+            self._update_layout_meta()
+            self._set_message(
+                f"CONTROLLER LAYOUT VERIFIED · REV {revision}",
+                "online",
+            )
+            return
+        selected_arm = self.road_arm_selector.currentData()
+        selected_sg = self.sg_selector.currentData()
+        self._layout.intersection = deepcopy(layout)
+        self._layout_schema = schema_version
+        self._layout_revision = revision
+        self._layout_source = source
+        self._intersection_dirty = False
+        self._loading = True
+        try:
+            type_index = self.intersection_type_input.findData(
+                self._layout.intersection.diagram_type
+            )
+            self.intersection_type_input.setCurrentIndex(max(0, type_index))
+            rotation_index = self.rotation_input.findData(
+                self._layout.intersection.rotation
+            )
+            self.rotation_input.setCurrentIndex(max(0, rotation_index))
+            self._populate_road_arm_selectors(str(selected_arm or ""))
+            sg_index = self.sg_selector.findData(selected_sg)
+            self.sg_selector.setCurrentIndex(sg_index if sg_index >= 0 else 0)
+            self.intersection_preview.set_layout_config(
+                self._layout.intersection
+            )
+            self.intersection_preview.set_signal_groups(
+                self._editor_signal_groups(snapshot)
+            )
+        finally:
+            self._loading = False
+        self._selected_arm_changed()
+        self._selected_sg_changed()
+        self._update_layout_meta()
+        self._update_intersection_controls()
+        self._set_message(
+            f"CONTROLLER LAYOUT LOADED · REV {revision}",
+            "online",
+        )
+
+    def _layout_save_completed(
+        self,
+        controller_id: str,
+        _layout: object,
+        revision: int,
+        message: str,
+    ) -> None:
+        if self.section != "intersection" or controller_id != self.controller_id:
+            return
+        if revision > 0:
+            self._layout_revision = revision
+        self._layout_source = "CONTROLLER · VERIFYING"
+        self._intersection_dirty = False
+        self._update_layout_meta()
+        self._set_message(message, "online")
+        self.intersection_saved.emit(controller_id, message)
+
+    def _layout_request_failed(
+        self,
+        controller_id: str,
+        action: str,
+        message: str,
+        code: int,
+    ) -> None:
+        if self.section != "intersection" or controller_id != self.controller_id:
+            return
+        if action == "load" and self._layout_revision <= 0:
+            self._layout_source = "CACHE / OFFLINE"
+        self._update_layout_meta()
+        self._update_intersection_controls()
+        suffix = " · CONFLICT 409" if code == 409 else ""
+        self._set_message(f"{message}{suffix}", "offline")
+        if action == "save":
+            self.intersection_failed.emit(controller_id, message)
+            QMessageBox.warning(self, "Intersection Layout", message)
+
+    def _layout_busy_changed(self, controller_id: str, busy: bool) -> None:
+        if self.section != "intersection" or controller_id != self.controller_id:
+            return
+        self._layout_busy = busy
+        self._update_intersection_controls()
+
+    def _update_layout_meta(self) -> None:
+        if self.section != "intersection":
+            return
+        revision = str(self._layout_revision) if self._layout_revision > 0 else "—"
+        schema = str(self._layout_schema) if self._layout_schema > 0 else "—"
+        self.layout_meta_label.setText(
+            f"{self._layout_source} · SCHEMA {schema} · REV {revision}"
+        )
+
+    def _update_intersection_controls(self) -> None:
+        if self.section != "intersection":
+            return
+        snapshot = self.service.get_controller(self.controller_id)
+        online = bool(snapshot and snapshot.online)
+        editable = online and not self._layout_busy
+        for widget in (
+            self.intersection_type_input,
+            self.rotation_input,
+            self.road_arm_selector,
+            self.arm_angle_input,
+            self.arm_flow_input,
+            self.sg_selector,
+            self.assigned_arm_input,
+            self.lane_position_input,
+            self.sg_rotation_input,
+            self.reload_intersection_button,
+            self.reset_intersection_button,
+        ):
+            widget.setEnabled(editable)
+        for checkbox in self._destination_checks.values():
+            checkbox.setEnabled(editable)
+        self.intersection_preview.set_editable(editable)
+        self.save_intersection_button.setEnabled(
+            bool(editable and self._layout_revision > 0)
+        )
+
+    def _editor_signal_groups(self, snapshot) -> list[SignalGroupState]:
+        known = {item.number: item for item in snapshot.signal_groups}
+        result: list[SignalGroupState] = []
+        for number in range(
+            1,
+            max(1, snapshot.active_signal_groups) + 1,
+        ):
+            existing = known.get(number)
+            typed_name = (
+                self.sg_name_inputs[number - 1].text().strip()
+                if hasattr(self, "sg_name_inputs")
+                else ""
+            )
+            result.append(
+                SignalGroupState(
+                    number=number,
+                    name=typed_name
+                    or (existing.name if existing else f"Signal Group {number}"),
+                    aspect=existing.aspect if existing else "OFF",
+                )
+            )
+        return result
+
+    def _sg_name_preview_changed(self, *_args) -> None:
+        if self.section != "intersection" or self._loading:
+            return
+        snapshot = self.service.get_controller(self.controller_id)
+        if snapshot is None:
+            return
+        selected = self.sg_selector.currentData()
+        groups = self._editor_signal_groups(snapshot)
+        self.intersection_preview.set_signal_groups(groups)
+        self.sg_selector.blockSignals(True)
+        for index, group in enumerate(groups):
+            if index < self.sg_selector.count():
+                self.sg_selector.setItemText(
+                    index,
+                    f"SG{group.number} · {group.name}",
+                )
+        selected_index = self.sg_selector.findData(selected)
+        self.sg_selector.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+        self.sg_selector.blockSignals(False)
         self._set_message(
             f"{self.section.upper()} LAYOUT LOADED · {snapshot.name}",
             "online",
@@ -559,7 +1069,7 @@ class DisplayLayoutEditor(QWidget):
                 defaults = default_signal_placements(
                     self._layout.intersection.diagram_type,
                     self._layout.intersection.rotation,
-                    snapshot.active_signal_groups,
+                    12,
                 )
                 for number, placement in defaults.items():
                     self._layout.intersection.placements.setdefault(
@@ -571,12 +1081,6 @@ class DisplayLayoutEditor(QWidget):
                             )
                         ),
                     )
-                self._layout.intersection.placements = {
-                    number: placement
-                    for number, placement
-                    in self._layout.intersection.placements.items()
-                    if 1 <= number <= snapshot.active_signal_groups
-                }
                 self._populate_road_arm_selectors(
                     self.road_arm_selector.currentData()
                 )
@@ -584,13 +1088,23 @@ class DisplayLayoutEditor(QWidget):
                     self._layout.intersection
                 )
                 self.intersection_preview.set_signal_groups(
-                    snapshot.signal_groups
+                    self._editor_signal_groups(snapshot)
                 )
                 self.sg_selector.clear()
-                for signal_group in snapshot.signal_groups:
+                known = {item.number: item for item in snapshot.signal_groups}
+                for number in range(
+                    1,
+                    max(1, snapshot.active_signal_groups) + 1,
+                ):
+                    signal_group = known.get(number)
+                    name = (
+                        signal_group.name
+                        if signal_group is not None
+                        else f"Signal Group {number}"
+                    )
                     self.sg_selector.addItem(
-                        f"SG{signal_group.number} · {signal_group.name}",
-                        signal_group.number,
+                        f"SG{number} · {name}",
+                        number,
                     )
                 selected_index = self.sg_selector.findData(selected_number)
                 self.sg_selector.setCurrentIndex(
@@ -622,6 +1136,7 @@ class DisplayLayoutEditor(QWidget):
         if self.section == "intersection":
             self._selected_arm_changed()
             self._selected_sg_changed()
+            self._update_intersection_controls()
         else:
             self._camera_mode_changed()
             self._refresh_camera_preview()
@@ -711,8 +1226,12 @@ class DisplayLayoutEditor(QWidget):
         )
         self.road_arm_selector.clear()
         self.assigned_arm_input.clear()
-        for arm in arms.values():
-            label = f"{arm.name} · {arm.angle:.0f}°"
+        for index, arm in enumerate(arms.values()):
+            label = _arm_display(
+                arm,
+                index,
+                self._layout.intersection.rotation,
+            )
             self.road_arm_selector.addItem(label, arm.arm_id)
             self.assigned_arm_input.addItem(label, arm.arm_id)
         road_index = self.road_arm_selector.findData(selected)
@@ -729,7 +1248,12 @@ class DisplayLayoutEditor(QWidget):
             return
         self._loading = True
         try:
-            self.arm_angle_input.setValue(int(round(arm.angle)) % 360)
+            self.arm_angle_input.setValue(
+                effective_arm_angle(
+                    arm,
+                    self._layout.intersection.rotation,
+                )
+            )
             flow_index = self.arm_flow_input.findData(arm.flow_direction)
             self.arm_flow_input.setCurrentIndex(max(0, flow_index))
         finally:
@@ -742,14 +1266,19 @@ class DisplayLayoutEditor(QWidget):
         arm = self._layout.intersection.road_arms.get(arm_id)
         if arm is None:
             return
-        arm.angle = float(self.arm_angle_input.value())
+        arm.angle = (
+            float(self.arm_angle_input.value())
+            - float(self._layout.intersection.rotation)
+        ) % 360.0
         arm.flow_direction = str(
             self.arm_flow_input.currentData() or "TWO_WAY"
         )
-        for placement in self._layout.intersection.placements.values():
-            if placement.road_arm_id == arm_id:
-                placement.flow_direction = arm.flow_direction
-        label = f"{arm.name} · {arm.angle:.0f}°"
+        arm_index = list(self._layout.intersection.road_arms).index(arm_id)
+        label = _arm_display(
+            arm,
+            arm_index,
+            self._layout.intersection.rotation,
+        )
         road_index = self.road_arm_selector.findData(arm_id)
         assigned_index = self.assigned_arm_input.findData(arm_id)
         if road_index >= 0:
@@ -759,6 +1288,7 @@ class DisplayLayoutEditor(QWidget):
         self.intersection_preview.set_layout_config(
             self._layout.intersection
         )
+        self._intersection_dirty = True
         self._selected_sg_changed()
         self._set_message(
             f"{arm.name.upper()} ROAD ARM CHANGED · NOT SAVED",
@@ -780,20 +1310,34 @@ class DisplayLayoutEditor(QWidget):
         )
         if source is None:
             return
-        destinations = [
-            arm
-            for arm in self._layout.intersection.road_arms.values()
-            if arm.arm_id != source.arm_id
-        ]
+        arm_order = list(self._layout.intersection.road_arms)
+        destinations = sorted(
+            (
+                arm
+                for arm in self._layout.intersection.road_arms.values()
+                if arm.arm_id != source.arm_id
+            ),
+            key=lambda arm: _destination_sort_key(
+                source,
+                arm,
+                arm_order.index(arm.arm_id),
+            ),
+        )
         for index, arm in enumerate(destinations):
-            movement = movement_name_between(source, arm)
-            checkbox = QCheckBox(f"{arm.name} · {movement}")
+            movement = _destination_movement(source, arm)
+            arm_index = arm_order.index(arm.arm_id)
+            arm_number = _arm_number(arm, arm_index)
+            direction = _direction_name(
+                effective_arm_angle(
+                    arm,
+                    self._layout.intersection.rotation,
+                )
+            )
+            checkbox = QCheckBox(
+                f"Arm {arm_number} – {direction} ({movement})"
+            )
             checkbox.setChecked(
                 arm.arm_id in placement.destination_arm_ids
-            )
-            checkbox.setEnabled(
-                source.flow_direction in {"INBOUND", "TWO_WAY"}
-                and arm.flow_direction in {"OUTBOUND", "TWO_WAY"}
             )
             checkbox.setToolTip(
                 f"Vehicle from {source.name} exits through {arm.name}."
@@ -801,8 +1345,8 @@ class DisplayLayoutEditor(QWidget):
             checkbox.toggled.connect(self._sg_visual_changed)
             self.destination_layout.addWidget(
                 checkbox,
-                index // 2,
-                index % 2,
+                index,
+                0,
             )
             self._destination_checks[arm.arm_id] = checkbox
         if not destinations:
@@ -812,35 +1356,62 @@ class DisplayLayoutEditor(QWidget):
     def _intersection_template_changed(self) -> None:
         if self._loading or not self.controller_id:
             return
-        snapshot = self.service.get_controller(self.controller_id)
-        if snapshot is None:
-            return
         new_type = str(self.intersection_type_input.currentData())
         new_rotation = int(self.rotation_input.currentData())
-        type_changed = new_type != self._layout.intersection.diagram_type
-        self._layout.intersection.diagram_type = new_type
-        self._layout.intersection.rotation = new_rotation
-        if type_changed or not self._layout.intersection.road_arms:
-            self._layout.intersection.road_arms = default_road_arms(new_type)
-        previous = self._layout.intersection.placements
-        updated = default_signal_placements(
-            new_type,
-            new_rotation,
-            snapshot.active_signal_groups,
-        )
-        for number, placement in updated.items():
-            old = previous.get(number)
-            if old is not None:
-                placement.rotation = old.rotation
-                if not type_changed:
-                    placement.movements = list(old.movements)
-                    placement.flow_direction = old.flow_direction
-                    placement.road_arm_id = old.road_arm_id
-                    placement.lane_position = old.lane_position
-                    placement.destination_arm_ids = list(
-                        old.destination_arm_ids
+        old_type = self._layout.intersection.diagram_type
+        old_rotation = self._layout.intersection.rotation
+        type_changed = new_type != old_type
+        rotation_changed = new_rotation != old_rotation
+        if not type_changed and not rotation_changed:
+            return
+
+        if type_changed:
+            answer = QMessageBox.question(
+                self,
+                "Change Diagram Type",
+                "Mengubah Diagram Type akan membuat ulang Road Arm dan posisi "
+                "seluruh SG. Lanjutkan?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self._loading = True
+                try:
+                    previous_index = self.intersection_type_input.findData(
+                        old_type
                     )
-        self._layout.intersection.placements = updated
+                    self.intersection_type_input.setCurrentIndex(
+                        max(0, previous_index)
+                    )
+                finally:
+                    self._loading = False
+                return
+            self._layout.intersection.diagram_type = new_type
+            self._layout.intersection.rotation = new_rotation
+            self._layout.intersection.road_arms = default_road_arms(new_type)
+            self._layout.intersection.placements = default_signal_placements(
+                new_type,
+                new_rotation,
+                12,
+            )
+        else:
+            delta = (new_rotation - old_rotation) % 360
+            turns = (delta // 90) % 4
+            for placement in self._layout.intersection.placements.values():
+                x, y = placement.x, placement.y
+                offset_x = placement.label_offset_x
+                offset_y = placement.label_offset_y
+                for _ in range(turns):
+                    x, y = 1.0 - y, x
+                    offset_x, offset_y = -offset_y, offset_x
+                placement.x = round(x, 3)
+                placement.y = round(y, 3)
+                placement.label_offset_x = round(offset_x, 3)
+                placement.label_offset_y = round(offset_y, 3)
+                if placement.rotation in {0, 90, 180, 270}:
+                    placement.rotation = (placement.rotation + delta) % 360
+            self._layout.intersection.rotation = new_rotation
+        self._intersection_dirty = True
         self._loading = True
         try:
             self._populate_road_arm_selectors()
@@ -852,7 +1423,13 @@ class DisplayLayoutEditor(QWidget):
         self._selected_arm_changed()
         self._selected_sg_changed()
         self._set_message(
-            f"{new_type.replace('_', ' ')} TEMPLATE CHANGED · NOT SAVED",
+            (
+                f"{new_type.replace('_', ' ')} TEMPLATE CHANGED · "
+                "CHECK ALL ROAD ARMS AND SG POSITIONS · NOT SAVED"
+                if type_changed
+                else "ROTATION, SG POSITION, SG ROTATION, AND LABEL POSITION "
+                "ADJUSTED · NOT SAVED"
+            ),
             "warning",
         )
 
@@ -939,7 +1516,6 @@ class DisplayLayoutEditor(QWidget):
                 destinations = [destination_id]
         placement.destination_arm_ids = destinations
         source = self._layout.intersection.road_arms[arm_id]
-        placement.flow_direction = source.flow_direction
         movements: list[str] = []
         for destination_id in destinations:
             destination = self._layout.intersection.road_arms.get(
@@ -960,6 +1536,7 @@ class DisplayLayoutEditor(QWidget):
             self._layout.intersection
         )
         self.intersection_preview.set_selected_signal(int(number))
+        self._intersection_dirty = True
         self._set_message(
             f"SG{number} VISUAL SETTINGS CHANGED · NOT SAVED",
             "warning",
@@ -974,32 +1551,76 @@ class DisplayLayoutEditor(QWidget):
         if self._loading:
             return
         self._layout.intersection = self.intersection_preview.layout_config()
+        self._intersection_dirty = True
         self._set_message(
             f"SG{number} POSITION · X {x:.2f} · Y {y:.2f} · NOT SAVED",
             "warning",
         )
 
+    def _intersection_label_changed(
+        self,
+        number: int,
+        offset_x: float,
+        offset_y: float,
+    ) -> None:
+        if self._loading:
+            return
+        self._layout.intersection = self.intersection_preview.layout_config()
+        self._intersection_dirty = True
+        self._set_message(
+            f"SG{number} LABEL POSITION · X {offset_x:+.2f} · "
+            f"Y {offset_y:+.2f} · NOT SAVED",
+            "warning",
+        )
+
     def _reset_intersection(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Reset SG Positions",
+            "Kembalikan posisi seluruh SG dan nama SG ke susunan awal Diagram "
+            "Type saat ini? Perubahan belum disimpan sampai SAVE ditekan.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
         self.intersection_preview.reset_placements()
         self._layout.intersection = self.intersection_preview.layout_config()
+        self._intersection_dirty = True
         self._set_message("SG POSITIONS RESET · NOT SAVED", "warning")
+
+    def _reload_intersection(self) -> None:
+        if not self.controller_id or self._layout_busy:
+            return
+        if self._intersection_dirty:
+            answer = QMessageBox.question(
+                self,
+                "Reload Intersection Layout",
+                "Perubahan Intersection Layout belum disimpan. Muat ulang dan "
+                "buang perubahan tersebut?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            self._intersection_dirty = False
+        self._set_message("LOADING INTERSECTION LAYOUT...", "warning")
+        self.layout_service.refresh(
+            self.controller_id,
+            force=True,
+            interactive=True,
+        )
 
     def _save_intersection(self) -> None:
         if not self.controller_id:
             return
         self._layout.intersection = self.intersection_preview.layout_config()
-        snapshot = self.service.get_controller(self.controller_id)
-        if snapshot is None:
-            return
-        latest = self.repository.get(
+        self.layout_service.save(
             self.controller_id,
-            snapshot.active_signal_groups,
-            snapshot.cameras,
+            self._layout.intersection,
+            self._layout_revision,
         )
-        latest.intersection = self._layout.intersection
-        self._layout = latest
-        self.repository.save(self.controller_id, latest)
-        self._set_message("INTERSECTION LAYOUT SAVED", "online")
+        self._set_message("SAVING INTERSECTION LAYOUT...", "warning")
 
     def _camera_mode_changed(self) -> None:
         custom = self.camera_mode_input.currentData() == "CUSTOM"
@@ -1095,14 +1716,10 @@ class DisplayLayoutEditor(QWidget):
         snapshot = self.service.get_controller(self.controller_id)
         if snapshot is None:
             return
-        latest = self.repository.get(
+        self.repository.save_cameras(
             self.controller_id,
-            snapshot.active_signal_groups,
-            snapshot.cameras,
+            self._layout.cameras,
         )
-        latest.cameras = self._layout.cameras
-        self._layout = latest
-        self.repository.save(self.controller_id, latest)
         self._set_message("CAMERA LAYOUT SAVED", "online")
 
     def _validate_camera_grid(self) -> str:

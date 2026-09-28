@@ -97,7 +97,7 @@ class BackupRestoreService(QObject):
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
         request.setRawHeader(b"Connection", b"close")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.00-FIX1-TEST")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.01-TEST1-FIX8")
         if content_type:
             request.setRawHeader(b"Content-Type", content_type)
         request.setTransferTimeout(12000)
@@ -251,6 +251,17 @@ class BackupRestoreService(QObject):
             self.validated.emit(controller_id, payload)
         else:
             self.action_completed.emit(controller_id, action, payload)
+            if action.startswith("restore-"):
+                QTimer.singleShot(
+                    600,
+                    lambda key=controller_id: (
+                        self.controller_service.intersection_layout_service.refresh(
+                            key,
+                            force=True,
+                            interactive=False,
+                        )
+                    ),
+                )
         QTimer.singleShot(250, self.controller_service.poll_now)
 
     def _request_timed_out(self) -> None:

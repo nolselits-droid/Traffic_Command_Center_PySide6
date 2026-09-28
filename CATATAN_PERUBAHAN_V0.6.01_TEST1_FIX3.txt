@@ -1,0 +1,26 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX3
+================================================================
+
+Perbaikan dibuat berdasarkan screenshot aktual pada resolusi 1920 x 1080.
+
+Masalah yang ditemukan
+----------------------
+1. Isi panel kiri bergeser horizontal secara tersembunyi. Akibatnya judul
+   INTERSECTION DIAGRAM hanya terlihat bagian akhirnya dan label field hilang.
+2. Live Preview mengikuti seluruh lebar panel kanan sehingga tampil seperti
+   banner hijau lebar, sedangkan diagram jalan terlihat kecil di tengah.
+
+Perbaikan
+---------
+1. Posisi horizontal kedua scroll area dikunci pada nilai nol.
+2. Form INTERSECTION DIAGRAM, ROAD ARM, dan SIGNAL GROUP CONFIGURATION diubah
+   menjadi label di atas field. Form tidak lagi membutuhkan dua kolom lebar.
+3. Live Preview menggunakan IntersectionLayoutPreview khusus editor.
+4. Rasio Live Preview mengikuti lebar dengan tambahan 24 px untuk petunjuk drag.
+5. Ukuran pilihan preview adalah 460 x 484 px.
+6. Ukuran minimum preview adalah 260 x 284 px.
+7. Ukuran maksimum preview adalah 520 x 544 px.
+8. Preview diposisikan di tengah atas dan tidak lagi memenuhi seluruh lebar
+   panel kanan.
+
+Tidak ada perubahan pada data, API, layoutRevision, atau traffic runtime.

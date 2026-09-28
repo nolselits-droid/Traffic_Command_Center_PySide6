@@ -1,0 +1,26 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX3
+================================================================
+
+1. Jalankan aplikasi dengan python main.py.
+2. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+3. Maksimalkan aplikasi pada monitor Full HD.
+
+Periksa panel kiri:
+- Tulisan INTERSECTION DIAGRAM terlihat lengkap.
+- DIAGRAM / LAYOUT dan ROAD ARM terlihat lengkap.
+- Setiap label berada di atas field-nya.
+- Tidak ada bagian menu yang bergeser atau terpotong di sisi kiri.
+- Scroll vertikal tetap dapat digunakan.
+
+Periksa Live Preview:
+- Area hijau berbentuk hampir persegi, bukan banner horizontal.
+- Seluruh jalan, SG, nama SG, arah mata angin, dan flow terlihat.
+- Preview berada di tengah panel kanan.
+- Preview tidak menekan Signal Group Identification.
+
+Uji juga pada window yang diperkecil:
+- Preview boleh mengecil sampai 260 x 284 px.
+- Tidak boleh ada horizontal auto-scroll.
+- Kedua panel tidak boleh saling menimpa.
+
+Perbaikan ini hanya mengubah tata letak UI.

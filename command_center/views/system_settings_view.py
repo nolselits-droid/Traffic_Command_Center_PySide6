@@ -67,7 +67,7 @@ class SystemSettingsView(QWidget):
         titles.addWidget(title)
         titles.addWidget(
             muted_label(
-                "Controller identity, operational timing, startup pattern, SG names, RTC, dan network information"
+                "Controller identity, operational timing, startup pattern, RTC, network, dan display layout"
             )
         )
         header.addLayout(titles)
@@ -116,10 +116,6 @@ class SystemSettingsView(QWidget):
 
         self.tabs = QTabWidget()
         self.tabs.setObjectName("systemSettingsTabs")
-        self.tabs.addTab(self._build_general_tab(), "IDENTITY & OPERATIONAL")
-        self.tabs.addTab(self._build_startup_tab(), "STARTUP PATTERN")
-        self.tabs.addTab(self._build_sg_names_tab(), "SIGNAL GROUP NAMES")
-        self.tabs.addTab(self._build_time_network_tab(), "RTC & NETWORK")
         self.intersection_layout_editor = DisplayLayoutEditor(
             controller_service,
             "intersection",
@@ -130,6 +126,22 @@ class SystemSettingsView(QWidget):
             "camera",
             self,
         )
+        self.sg_name_inputs = self.intersection_layout_editor.sg_name_inputs
+        self.save_sg_names_button = (
+            self.intersection_layout_editor.save_sg_names_button
+        )
+        for field in self.sg_name_inputs:
+            field.textChanged.connect(self._form_changed)
+        self.save_sg_names_button.clicked.connect(self._save_sg_names)
+        self.intersection_layout_editor.intersection_saved.connect(
+            self._intersection_layout_saved
+        )
+        self.intersection_layout_editor.intersection_failed.connect(
+            self._intersection_layout_failed
+        )
+        self.tabs.addTab(self._build_general_tab(), "IDENTITY & OPERATIONAL")
+        self.tabs.addTab(self._build_startup_tab(), "STARTUP PATTERN")
+        self.tabs.addTab(self._build_time_network_tab(), "RTC & NETWORK")
         self.tabs.addTab(
             self.intersection_layout_editor,
             "INTERSECTION LAYOUT",
@@ -264,46 +276,6 @@ class SystemSettingsView(QWidget):
         self.save_startup_button.clicked.connect(self._save_startup)
         layout.addWidget(
             self.save_startup_button,
-            0,
-            Qt.AlignmentFlag.AlignLeft,
-        )
-        layout.addStretch()
-        return container
-
-    def _build_sg_names_tab(self) -> QWidget:
-        container, layout = self._scroll_tab()
-        panel = self._panel("Signal Group Identification")
-        panel_layout = panel.layout()
-        panel_layout.addWidget(
-            muted_label(
-                "Nama SG dipakai pada Overview, Live View, dan Traffic Configuration. Maksimum 40 karakter per SG."
-            )
-        )
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(16)
-        grid.setVerticalSpacing(8)
-        self.sg_name_inputs: list[QLineEdit] = []
-        for index in range(12):
-            label = QLabel(f"SG{index + 1}")
-            field = QLineEdit()
-            field.setMaxLength(40)
-            field.setPlaceholderText(f"Signal Group {index + 1}")
-            field.textChanged.connect(self._form_changed)
-            self.sg_name_inputs.append(field)
-            column = 0 if index < 6 else 2
-            row = index if index < 6 else index - 6
-            grid.addWidget(label, row, column)
-            grid.addWidget(field, row, column + 1)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(3, 1)
-        panel_layout.addLayout(grid)
-        layout.addWidget(panel)
-        self.save_sg_names_button = QPushButton("SAVE SG NAMES")
-        self.save_sg_names_button.setProperty("systemAction", True)
-        self.save_sg_names_button.setProperty("actionRole", "confirm")
-        self.save_sg_names_button.clicked.connect(self._save_sg_names)
-        layout.addWidget(
-            self.save_sg_names_button,
             0,
             Qt.AlignmentFlag.AlignLeft,
         )
@@ -550,7 +522,9 @@ class SystemSettingsView(QWidget):
         ):
             return
         self.current_time = payload
-        self._time_received_at = datetime.now()
+        self._time_received_at = datetime.now() - timedelta(
+            milliseconds=self._estimated_one_way_delay_ms()
+        )
         value = payload.as_datetime()
         if value is not None:
             self.manual_date_input.setDate(
@@ -861,7 +835,6 @@ class SystemSettingsView(QWidget):
         )
 
     def _sync_from_pc(self) -> None:
-        value = datetime.now().replace(microsecond=0)
         difference = self._time_difference_seconds()
         warning = (
             f"Selisih RTC dan PC adalah {difference:+d} detik. "
@@ -873,7 +846,8 @@ class SystemSettingsView(QWidget):
                 "Perubahan ini dapat langsung mengganti Schedule/Plan aktif.\n\n"
             )
         warning += (
-            f"Set RTC controller menjadi {value.strftime('%H:%M:%S  %d/%m/%Y')}?"
+            "RTC akan menggunakan waktu PC terbaru tepat setelah tombol YES "
+            "ditekan. Lanjutkan sinkronisasi?"
         )
         answer = QMessageBox.warning(
             self,
@@ -883,6 +857,7 @@ class SystemSettingsView(QWidget):
             QMessageBox.StandardButton.No,
         )
         if answer == QMessageBox.StandardButton.Yes:
+            value = self._current_pc_sync_value()
             self.settings_service.set_time(self.current_controller_id, value)
 
     def _set_manual_time(self) -> None:
@@ -969,6 +944,32 @@ class SystemSettingsView(QWidget):
             details=message,
         )
 
+    def _intersection_layout_saved(
+        self,
+        controller_id: str,
+        message: str,
+    ) -> None:
+        snapshot = self.controller_service.get_controller(controller_id)
+        self.event_service.record_audit(
+            controller_id,
+            snapshot.name if snapshot else controller_id,
+            "Intersection Layout updated",
+            details=message,
+        )
+
+    def _intersection_layout_failed(
+        self,
+        controller_id: str,
+        message: str,
+    ) -> None:
+        snapshot = self.controller_service.get_controller(controller_id)
+        self.event_service.record_audit(
+            controller_id,
+            snapshot.name if snapshot else controller_id,
+            "Intersection Layout update failed",
+            details=message,
+        )
+
     def _busy_changed(self, busy: bool) -> None:
         self._busy = busy
         self._update_controls()
@@ -1002,6 +1003,25 @@ class SystemSettingsView(QWidget):
         if self._time_received_at is None:
             return base
         return base + (datetime.now() - self._time_received_at)
+
+    def _estimated_one_way_delay_ms(self) -> int:
+        snapshot = self.controller_service.get_controller(
+            self.current_controller_id
+        )
+        if snapshot is None or snapshot.response_time_ms is None:
+            return 0
+        return max(0, min(500, round(snapshot.response_time_ms / 2)))
+
+    def _current_pc_sync_value(self) -> datetime:
+        value = datetime.now() + timedelta(
+            milliseconds=self._estimated_one_way_delay_ms()
+        )
+        # DS3231 and the controller API have one-second resolution. Round to
+        # the nearest second instead of always truncating down, which could add
+        # almost one second of negative error before network latency.
+        if value.microsecond >= 500_000:
+            value += timedelta(seconds=1)
+        return value.replace(microsecond=0)
 
     def _time_difference_seconds(self) -> int | None:
         controller_time = self._estimated_controller_time()

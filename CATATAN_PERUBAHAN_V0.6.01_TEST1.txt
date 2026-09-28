@@ -1,0 +1,54 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1
+=====================================================
+
+1. Intersection Layout sekarang dibaca dari dan disimpan ke ESP32-S3 melalui
+   endpoint /api/intersection/layout.
+
+2. ESP32-S3 menjadi sumber data utama Intersection Layout. File lokal hanya
+   menyimpan cache terakhir untuk tampilan ketika controller offline.
+
+3. Penyimpanan menggunakan expectedRevision. Jika layout sudah berubah di
+   controller, HTTP 409 ditampilkan dan operator diminta menekan RELOAD.
+
+4. Menu Intersection Layout disamakan dengan firmware V1.24 TEST4:
+   - INTERSECTION DIAGRAM
+     - DIAGRAM / LAYOUT
+     - ROAD ARM
+   - SIGNAL GROUP CONFIGURATION
+   - Live Preview
+   - Signal Group Identification
+
+5. Tab SIGNAL GROUP NAMES yang berdiri sendiri dihapus. Pengaturan nama SG1
+   sampai SG12 dipindahkan ke bawah Live Preview pada tab INTERSECTION LAYOUT.
+
+6. Posisi kotak lampu SG dan posisi nama SG dapat digeser secara terpisah.
+   Posisi nama menggunakan label_offset_x dan label_offset_y yang sama dengan
+   firmware ESP32-S3.
+
+7. Diagram Rotation mengikuti perilaku firmware: posisi SG, rotasi lampu yang
+   diatur manual, serta posisi nama ikut berputar. NORTH, EAST, SOUTH, dan WEST
+   tetap menjadi referensi kompas.
+
+8. Selected Road Arm dan Assigned Road Arm menampilkan nomor Arm, arah aktual,
+   dan sudut aktual setelah Diagram Rotation diterapkan.
+
+9. Live View otomatis mengikuti cache layout terbaru dari controller.
+
+10. Perubahan Intersection Layout dan Camera Layout dipisahkan. Sinkronisasi
+    Intersection Layout tidak membangun ulang atau me-restart stream kamera.
+
+11. Camera Layout tetap disimpan lokal di PC seperti versi sebelumnya.
+
+12. Penyimpanan dan kegagalan Intersection Layout dicatat pada Audit Event.
+
+13. Ditambahkan panduan uji lengkap berbahasa Indonesia:
+    V0.6.01_TEST1_PANDUAN_UJI.txt
+
+CATATAN KOMPATIBILITAS
+---------------------
+- Membutuhkan ESP32-S3 V1.24 TEST4 atau firmware lain yang menyediakan schema
+  Intersection Layout versi 2.
+- Perubahan Intersection Layout tidak membutuhkan Safe Apply dan tidak mengubah
+  Plan, Stage, Schedule, output SG, atau safety runtime.
+- Jika controller offline, layout cache dapat dilihat tetapi tidak dapat
+  disimpan kembali sampai controller online dan revision terbaru dimuat.

@@ -51,7 +51,7 @@ class ControlService(QObject):
         self.busy_changed.emit(True)
         request = QNetworkRequest(QUrl(f"{base_url}{endpoint}"))
         request.setRawHeader(b"Accept", b"application/json")
-        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.00-FIX1-TEST")
+        request.setRawHeader(b"User-Agent", b"Traffic-Command-Center/0.6.01-TEST1-FIX8")
         request.setTransferTimeout(4500)
         reply = self._network.post(request, QByteArray())
         self._reply = reply

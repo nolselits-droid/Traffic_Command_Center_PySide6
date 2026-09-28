@@ -102,6 +102,14 @@ class CameraConfigView(QWidget):
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.main_path_input = QLineEdit()
         self.sub_path_input = QLineEdit()
+        self.rtsp_cache_input = QSpinBox()
+        self.rtsp_cache_input.setRange(200, 3000)
+        self.rtsp_cache_input.setSingleStep(100)
+        self.rtsp_cache_input.setSuffix(" ms")
+        self.rtsp_cache_input.setToolTip(
+            "Nilai kecil mengurangi delay tetapi membutuhkan jaringan yang "
+            "lebih stabil. Rekomendasi awal: 800 ms."
+        )
 
         form.addRow("Camera profile", self.profile_input)
         form.addRow("Camera state", self.enabled_input)
@@ -112,11 +120,13 @@ class CameraConfigView(QWidget):
         form.addRow("Password", self.password_input)
         form.addRow("Main stream path", self.main_path_input)
         form.addRow("Substream path", self.sub_path_input)
+        form.addRow("RTSP cache / latency", self.rtsp_cache_input)
         form_root.addLayout(form)
 
         note = muted_label(
             "Preset Hikvision memakai /Streaming/Channels/101 dan 102. "
-            "Custom RTSP dapat diisi sesuai kondisi lapangan."
+            "Custom RTSP dapat diisi sesuai kondisi lapangan. Cache kecil "
+            "mengurangi delay; cache besar lebih stabil."
         )
         note.setWordWrap(True)
         form_root.addWidget(note)
@@ -249,6 +259,7 @@ class CameraConfigView(QWidget):
         self.password_input.setText(camera.password)
         self.main_path_input.setText(camera.main_path)
         self.sub_path_input.setText(camera.sub_path)
+        self.rtsp_cache_input.setValue(camera.rtsp_cache_ms)
         self._update_camera_status(camera.online)
         self.result_label.setText(
             "Ready · " + self.service.camera_repository.password_storage_message
@@ -270,6 +281,10 @@ class CameraConfigView(QWidget):
                     break
         self.result_label.setText(message)
         if snapshot:
+            self.service.camera_configuration_changed.emit(
+                snapshot.controller_id,
+                camera.camera_id,
+            )
             self.service.snapshot_updated.emit(snapshot.controller_id)
 
     def _test_connection(self) -> None:
@@ -336,6 +351,7 @@ class CameraConfigView(QWidget):
         camera.password = self.password_input.text()
         camera.main_path = main_path
         camera.sub_path = sub_path
+        camera.rtsp_cache_ms = self.rtsp_cache_input.value()
         # Build both URLs now so malformed values are caught before opening VLC.
         build_rtsp_url(camera, main_stream=True)
         build_rtsp_url(camera, main_stream=False)

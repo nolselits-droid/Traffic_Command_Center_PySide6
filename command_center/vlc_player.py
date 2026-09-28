@@ -292,7 +292,7 @@ class FullscreenCameraDialog(QDialog):
         if self.player.play(
             self.video_surface,
             url,
-            caching_ms=1400,
+            caching_ms=self.camera.rtsp_cache_ms,
             username=self.camera.username,
             password=self.camera.password,
         ):

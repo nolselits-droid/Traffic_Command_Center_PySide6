@@ -1,0 +1,33 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX6
+================================================================
+
+SINKRONISASI INTERSECTION LAYOUT SAAT STARTUP
+---------------------------------------------
+- Cache Intersection Layout tidak lagi dipangkas ketika data controller masih
+  berupa placeholder dengan active_signal_groups = 0.
+- Setelah status controller pertama diterima, Live View menggambar ulang layout
+  menggunakan jumlah dan nama SG aktual.
+- GET Intersection Layout pertama selalu mengirim notifikasi redraw walaupun
+  payload controller sama dengan cache lokal.
+- RELOAD FROM CONTROLLER selalu memperbarui Live Preview dan Live View tanpa
+  membutuhkan SAVE INTERSECTION LAYOUT.
+- SAVE tetap hanya digunakan untuk perubahan layout yang benar-benar ingin
+  disimpan ke ESP32-S3.
+- Refresh berkala yang payload-nya tidak berubah tetap tidak memicu redraw agar
+  tampilan tidak berkedip.
+
+PERAPIAN INTERSECTION LAYOUT
+----------------------------
+- Pembagian tetap panel pengaturan dan Live Preview diubah dari 40:60 menjadi
+  33:67.
+- Lebar minimum panel kiri diturunkan secara aman menjadi 390 px.
+- RELOAD FROM CONTROLLER dan RESET SG POSITIONS ditempatkan sejajar dalam satu
+  baris dengan lebar yang sama.
+- SAVE INTERSECTION LAYOUT ditempatkan pada baris kedua dengan lebar penuh.
+- Ukuran font tombol sekunder dibuat lebih ringkas agar teks tetap muat.
+
+BATAS PERUBAHAN
+---------------
+- Tidak ada perubahan pada firmware atau NVS ESP32-S3.
+- Tidak ada perubahan pada traffic runtime, Plan, Stage, Schedule, Holiday,
+  Traffic Control, kamera, atau Backup & Restore.

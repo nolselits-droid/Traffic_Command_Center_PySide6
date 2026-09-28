@@ -1,0 +1,56 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX6
+================================================================
+
+A. SINKRONISASI OTOMATIS SAAT STARTUP
+-------------------------------------
+1. Pastikan Intersection Layout telah tersimpan pada ESP32-S3.
+2. Tutup Command Center sepenuhnya.
+3. Jalankan kembali Command Center dan tunggu controller berstatus ONLINE.
+4. Buka tab LIVE VIEW tanpa membuka SYSTEM SETTINGS terlebih dahulu.
+5. Pastikan diagram langsung sama dengan dashboard ESP32-S3:
+   - Diagram Type dan Rotation sama.
+   - Jumlah serta posisi SG sama.
+   - Assigned Road Arm, SG Rotation, label SG, dan flow sama.
+6. Pastikan tidak perlu menekan RELOAD atau SAVE.
+
+B. RELOAD TANPA SAVE
+--------------------
+1. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+2. Tekan RELOAD FROM CONTROLLER.
+3. Jangan menekan SAVE INTERSECTION LAYOUT.
+4. Buka tab LIVE VIEW.
+5. Pastikan Live View langsung memakai layout hasil RELOAD.
+6. Pastikan layoutRevision pada controller tidak bertambah karena hanya GET.
+
+C. PERUBAHAN JUMLAH ATAU NAMA SG
+--------------------------------
+1. Pastikan jumlah SG aktual dibaca dari controller.
+2. Pastikan seluruh SG aktif tampil; bukan hanya SG1.
+3. Bila nama SG diubah melalui ESP32-S3, muat ulang data controller.
+4. Pastikan nama dan diagram Live View ikut diperbarui.
+
+D. TAMPILAN INTERSECTION LAYOUT
+-------------------------------
+1. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT pada layar Full HD.
+2. Pastikan panel kiri dan Live Preview mendekati perbandingan 33:67.
+3. Pastikan field pada panel kiri tidak terpotong secara horizontal.
+4. Pastikan Live Preview lebih lebar daripada FIX5 dan seluruh diagram terlihat.
+5. Pastikan RELOAD FROM CONTROLLER dan RESET SG POSITIONS berada pada satu baris.
+6. Pastikan kedua tombol tersebut mempunyai lebar yang sama.
+7. Pastikan SAVE INTERSECTION LAYOUT berada di bawahnya dan selebar panel.
+
+E. REGRESI SAVE DAN REVISION GUARD
+---------------------------------
+1. Ubah satu posisi SG lalu tekan SAVE INTERSECTION LAYOUT.
+2. Pastikan layout tersimpan dan Live View segera berubah.
+3. Pastikan GET verifikasi berjalan setelah SAVE.
+4. Uji revision conflict seperti sebelumnya dan pastikan respons 409 tetap
+   meminta operator melakukan RELOAD.
+
+F. STABILITAS TAMPILAN
+----------------------
+1. Biarkan LIVE VIEW dan INTERSECTION LAYOUT terbuka masing-masing minimal
+   60 detik.
+2. Pastikan diagram tidak berkedip atau bergeser karena polling berkala.
+3. Pastikan tombol SAVE tidak berkedip sendiri.
+4. Bila SG sedang FLASH YELLOW, hanya aspek lampu SG yang berkedip.

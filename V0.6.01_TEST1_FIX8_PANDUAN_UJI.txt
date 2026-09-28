@@ -1,0 +1,84 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX8
+=====================================================
+
+A. PERSIAPAN
+------------
+1. Aktifkan virtual environment.
+2. Jalankan aplikasi:
+
+   python main.py
+
+3. Pastikan controller online.
+4. Buka SYSTEM SETTINGS, kemudian INTERSECTION LAYOUT.
+
+B. UJI SUSUNAN DESTINATION ROAD ARM
+----------------------------------
+1. Pilih diagram FOUR-WAY INTERSECTION dengan Rotation 0°.
+2. Pada SIGNAL GROUP CONFIGURATION, pilih SG yang Assigned Road Arm-nya
+   Arm 1 – North.
+3. Periksa Destination Road Arm.
+
+Hasil yang diharapkan:
+
+   Destination Road Arm:  [ ] Arm 3 – South (Straight)
+                          [ ] Arm 2 – East (Left)
+                          [ ] Arm 4 – West (Right)
+
+- Kondisi centang mengikuti konfigurasi SG yang tersimpan.
+- Label dan pilihan pertama berada dalam satu baris.
+- Pilihan kedua dan ketiga berada tepat di bawah pilihan pertama.
+- Tidak ada pilihan yang berjajar ke samping.
+
+C. UJI ASSIGNED ROAD ARM LAIN
+-----------------------------
+1. Pilih Assigned Road Arm East, South, dan West secara bergantian.
+2. Periksa urutan Destination Road Arm setiap kali Assigned Road Arm berubah.
+
+Hasil yang diharapkan:
+- Tujuan Straight selalu ditempatkan lebih dahulu jika tersedia.
+- Tujuan Left berada setelah Straight.
+- Tujuan Right berada setelah Left.
+- Nomor arm dan arah mata angin mengikuti layout aktual.
+
+D. UJI DIAGRAM ROTATION
+-----------------------
+1. Ubah Diagram Rotation menjadi 90°, 180°, dan 270°.
+2. Pilih beberapa SG dan periksa nama arah pada Destination Road Arm.
+
+Hasil yang diharapkan:
+- Nama North/East/South/West berubah mengikuti rotasi diagram.
+- Klasifikasi Straight/Left/Right tetap berdasarkan hubungan road arm dan arah
+  gerak kendaraan, bukan berdasarkan posisi checkbox sebelumnya.
+
+E. UJI T-JUNCTION DAN FIVE-WAY
+------------------------------
+1. Uji T-JUNCTION.
+2. Uji FIVE-WAY INTERSECTION.
+3. Pilih setiap Assigned Road Arm yang tersedia.
+
+Hasil yang diharapkan:
+- Semua tujuan disusun satu kolom vertikal.
+- Pada geometri yang tidak mempunyai arm tepat berseberangan, daftar dapat
+  dimulai dari Left atau Right karena memang tidak ada tujuan Straight.
+- Pada simpang lima, tujuan dalam kelompok arah yang sama diurutkan dari sudut
+  yang paling dekat dengan arah lurus.
+
+F. UJI PENYIMPANAN
+------------------
+1. Pilih satu atau beberapa Destination Road Arm.
+2. Tekan SAVE INTERSECTION LAYOUT.
+3. Tekan RELOAD FROM CONTROLLER.
+
+Hasil yang diharapkan:
+- Pilihan tujuan tetap sama setelah reload.
+- Live Preview dan LIVE VIEW mengikuti tujuan yang tersimpan.
+- layoutRevision bertambah setelah penyimpanan berhasil.
+
+G. REGRESI FIX7
+---------------
+1. Uji SYNC FROM PC.
+2. Uji RTSP cache/latency pada minimal dua kamera.
+3. Uji Restore backup yang mengandung Intersection Layout berbeda.
+
+Hasil yang diharapkan:
+- Seluruh fungsi FIX7 tetap berjalan normal.

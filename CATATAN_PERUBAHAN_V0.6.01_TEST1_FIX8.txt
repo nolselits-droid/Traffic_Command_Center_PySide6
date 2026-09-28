@@ -1,0 +1,30 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX8
+===========================================================
+
+SIGNAL GROUP CONFIGURATION - DESTINATION ROAD ARM
+-------------------------------------------------
+1. Label diubah menjadi "Destination Road Arm:".
+2. Label berada pada baris yang sama dengan pilihan tujuan pertama.
+3. Pilihan tujuan berikutnya disusun vertikal pada kolom nilai yang sama.
+4. Pilihan tidak lagi dibagi menjadi dua kolom horizontal.
+5. Urutan tujuan dihitung berdasarkan arah kendaraan:
+   - Straight
+   - Left
+   - Right
+6. Teks tujuan dibuat lebih ringkas tanpa sudut derajat, misalnya:
+
+   Destination Road Arm:  [x] Arm 3 – South (Straight)
+                          [x] Arm 2 – East (Left)
+                          [ ] Arm 4 – West (Right)
+
+7. North/East/South/West tetap dihitung dari sudut road arm dan Diagram
+   Rotation yang aktif.
+8. Assigned Road Arm tetap menampilkan sudut derajat karena informasi tersebut
+   masih diperlukan ketika engineer mengatur posisi dan orientasi road arm.
+9. Data yang disimpan tidak berubah. Perubahan ini hanya merapikan penyajian
+   dan urutan pilihan pada UI.
+
+FIX8 tetap menyertakan seluruh perbaikan FIX7:
+- Koreksi SYNC FROM PC.
+- RTSP cache/latency per kamera.
+- Sinkronisasi Intersection Layout setelah Restore atau perubahan revision.

@@ -8,6 +8,7 @@ from PySide6.QtCore import QPointF, QRectF, QTimer, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
+    QFontMetrics,
     QMouseEvent,
     QPainter,
     QPainterPath,
@@ -31,6 +32,7 @@ class IntersectionDiagram(QWidget):
     """Configurable road diagram with draggable SG indicators."""
 
     placement_changed = Signal(int, float, float)
+    label_offset_changed = Signal(int, float, float)
     signal_selected = Signal(int)
 
     ASPECT_COLORS = {
@@ -44,9 +46,12 @@ class IntersectionDiagram(QWidget):
         self._signal_groups: list[SignalGroupState] = []
         self._layout = IntersectionLayoutConfig()
         self._editable = False
+        self._show_compass_labels = True
         self._selected_signal: int | None = None
         self._drag_number: int | None = None
+        self._drag_label_number: int | None = None
         self._signal_rects: dict[int, QRectF] = {}
+        self._label_rects: dict[int, QRectF] = {}
         self._flash_timer = QTimer(self)
         self._flash_timer.setInterval(100)
         self._flash_timer.timeout.connect(self.update)
@@ -57,6 +62,9 @@ class IntersectionDiagram(QWidget):
         )
 
     def set_editable(self, editable: bool) -> None:
+        editable = bool(editable)
+        if editable == self._editable:
+            return
         self._editable = editable
         self.setCursor(
             Qt.CursorShape.OpenHandCursor
@@ -66,7 +74,17 @@ class IntersectionDiagram(QWidget):
         self.update()
 
     def set_layout_config(self, layout: IntersectionLayoutConfig) -> None:
-        self._layout = deepcopy(layout)
+        updated = deepcopy(layout)
+        if updated == self._layout:
+            return
+        self._layout = updated
+        self.update()
+
+    def set_compass_labels_visible(self, visible: bool) -> None:
+        visible = bool(visible)
+        if visible == self._show_compass_labels:
+            return
+        self._show_compass_labels = visible
         self.update()
 
     def set_selected_signal(self, number: int | None) -> None:
@@ -81,7 +99,7 @@ class IntersectionDiagram(QWidget):
         updated = default_signal_placements(
             self._layout.diagram_type,
             self._layout.rotation,
-            len(self._signal_groups),
+            12,
         )
         for number, placement in updated.items():
             old = previous.get(number)
@@ -98,7 +116,8 @@ class IntersectionDiagram(QWidget):
         self.update()
 
     def set_signal_groups(self, signal_groups: list[SignalGroupState]) -> None:
-        self._signal_groups = signal_groups
+        changed = signal_groups != self._signal_groups
+        self._signal_groups = list(signal_groups)
         defaults = default_signal_placements(
             self._layout.diagram_type,
             self._layout.rotation,
@@ -114,14 +133,13 @@ class IntersectionDiagram(QWidget):
             self._flash_timer.start()
         elif not flashing:
             self._flash_timer.stop()
-        self.update()
+        if changed:
+            self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        full_width = float(self.width())
-        full_height = float(self.height())
         painter.fillRect(self.rect(), QColor("#0c2823"))
         canvas = self._canvas_rect()
         painter.save()
@@ -157,7 +175,10 @@ class IntersectionDiagram(QWidget):
             width,
             height,
         )
-        self._draw_arm_labels(painter, road_arms, width, height)
+        if self._editable:
+            self._draw_arm_labels(painter, road_arms, width, height)
+        if self._show_compass_labels:
+            self._draw_compass_labels(painter, width, height)
         self._draw_outbound_indicators(
             painter,
             road_arms,
@@ -186,6 +207,7 @@ class IntersectionDiagram(QWidget):
             )
 
         self._signal_rects.clear()
+        self._label_rects.clear()
         compact = len(self._signal_groups) > 8
         box_width = width * (0.155 if compact else 0.20)
         box_height = width * (0.061 if compact else 0.074)
@@ -232,22 +254,21 @@ class IntersectionDiagram(QWidget):
                 placement,
                 compact,
             )
+            self._draw_signal_name(
+                painter,
+                signal_group,
+                placement,
+                width,
+                height,
+                canvas,
+            )
 
         painter.restore()
-
-        if self._editable:
-            painter.setPen(QColor("#8fcdf8"))
-            painter.setFont(QFont("Segoe UI", 8))
-            painter.drawText(
-                QRectF(8, full_height - 22, full_width - 16, 16),
-                Qt.AlignmentFlag.AlignCenter,
-                "Drag an SG indicator to change its display position",
-            )
 
     def _canvas_rect(self) -> QRectF:
         available_height = max(
             1.0,
-            float(self.height()) - (24.0 if self._editable else 0.0),
+            float(self.height()),
         )
         size = max(1.0, min(float(self.width()), available_height))
         return QRectF(
@@ -261,6 +282,14 @@ class IntersectionDiagram(QWidget):
         if not self._editable or event.button() != Qt.MouseButton.LeftButton:
             return super().mousePressEvent(event)
         position = event.position()
+        for number, rect in reversed(tuple(self._label_rects.items())):
+            if rect.contains(position):
+                self._selected_signal = number
+                self.signal_selected.emit(number)
+                self._drag_label_number = number
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
         for number, rect in reversed(tuple(self._signal_rects.items())):
             if rect.contains(position):
                 self._selected_signal = number
@@ -272,6 +301,29 @@ class IntersectionDiagram(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._drag_label_number is not None:
+            canvas = self._canvas_rect()
+            placement = self._layout.placements.get(self._drag_label_number)
+            if placement is None:
+                return
+            label_x = (event.position().x() - canvas.left()) / canvas.width()
+            label_y = (event.position().y() - canvas.top()) / canvas.height()
+            placement.label_offset_x = max(
+                -0.24,
+                min(0.24, label_x - placement.x),
+            )
+            placement.label_offset_y = max(
+                -0.24,
+                min(0.24, label_y - placement.y),
+            )
+            self.label_offset_changed.emit(
+                self._drag_label_number,
+                placement.label_offset_x,
+                placement.label_offset_y,
+            )
+            self.update()
+            event.accept()
+            return
         if self._drag_number is None:
             return super().mouseMoveEvent(event)
         canvas = self._canvas_rect()
@@ -294,6 +346,11 @@ class IntersectionDiagram(QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self._drag_label_number is not None:
+            self._drag_label_number = None
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            event.accept()
+            return
         if self._drag_number is not None:
             self._drag_number = None
             self.setCursor(Qt.CursorShape.OpenHandCursor)
@@ -404,7 +461,30 @@ class IntersectionDiagram(QWidget):
             outward, _ = self._arm_vectors(arm)
             point = self._advance_point(center, outward, distance)
             rect = QRectF(point.x() - 42.0, point.y() - 9.0, 84.0, 18.0)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, arm.name.upper())
+            painter.drawText(
+                rect,
+                Qt.AlignmentFlag.AlignCenter,
+                arm.arm_id.upper(),
+            )
+
+    @staticmethod
+    def _draw_compass_labels(
+        painter: QPainter,
+        width: float,
+        height: float,
+    ) -> None:
+        painter.setPen(QColor("#79c7ff"))
+        font = QFont("Segoe UI", 8)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        labels = (
+            ("NORTH", QRectF(width / 2.0 - 36.0, 3.0, 72.0, 18.0)),
+            ("EAST", QRectF(width - 75.0, height / 2.0 - 9.0, 72.0, 18.0)),
+            ("SOUTH", QRectF(width / 2.0 - 36.0, height - 21.0, 72.0, 18.0)),
+            ("WEST", QRectF(3.0, height / 2.0 - 9.0, 72.0, 18.0)),
+        )
+        for text, rect in labels:
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
     def _draw_outbound_indicators(
         self,
@@ -783,6 +863,52 @@ class IntersectionDiagram(QWidget):
             90
             if abs(placement.x - 0.5) > abs(placement.y - 0.5)
             else 0
+        )
+
+    def _draw_signal_name(
+        self,
+        painter: QPainter,
+        signal_group: SignalGroupState,
+        placement: SignalPlacement,
+        width: float,
+        height: float,
+        canvas: QRectF,
+    ) -> None:
+        font = QFont("Segoe UI", 8)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        metrics = QFontMetrics(font)
+        text = metrics.elidedText(
+            signal_group.name or f"Signal Group {signal_group.number}",
+            Qt.TextElideMode.ElideRight,
+            122,
+        )
+        center_x = max(
+            65.0,
+            min(width - 65.0, (placement.x + placement.label_offset_x) * width),
+        )
+        center_y = max(
+            11.0,
+            min(height - 11.0, (placement.y + placement.label_offset_y) * height),
+        )
+        rect = QRectF(center_x - 65.0, center_y - 10.0, 130.0, 20.0)
+        background = QColor("#102631")
+        background.setAlpha(220)
+        painter.setPen(
+            QPen(
+                QColor("#79c7ff")
+                if signal_group.number == self._selected_signal
+                else QColor("#526e7e"),
+                1,
+            )
+        )
+        painter.setBrush(background)
+        painter.drawRoundedRect(rect, 4, 4)
+        painter.setPen(QColor("#ffad5b" if self._editable else "#9bd8ff"))
+        painter.drawText(rect.adjusted(4, 0, -4, 0), Qt.AlignmentFlag.AlignCenter, text)
+        self._label_rects[signal_group.number] = rect.translated(
+            canvas.left(),
+            canvas.top(),
         )
 
     def _draw_signal(

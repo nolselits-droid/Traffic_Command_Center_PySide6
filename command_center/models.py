@@ -37,6 +37,7 @@ class CameraConfiguration:
     password: str = ""
     main_path: str = "/Streaming/Channels/101"
     sub_path: str = "/Streaming/Channels/102"
+    rtsp_cache_ms: int = 1400
 
 
 @dataclass(slots=True)
@@ -53,7 +54,7 @@ class ControllerSnapshot:
     ip_address: str
     network_interface: NetworkInterface
     reported_controller_id: int | None = None
-    firmware_version: str = "V1.23.1"
+    firmware_version: str = "V1.24 TEST4"
     online: bool = True
     mode: ControllerMode = ControllerMode.NORMAL
     safety_status: str = "OK"
@@ -67,6 +68,7 @@ class ControllerSnapshot:
     consecutive_failures: int = 0
     config_revision: int = 1
     runtime_revision: int = 1
+    layout_revision: int = 0
     apply_state: str = "UNKNOWN"
     config_dirty: bool = False
     editor_editing: bool = False

@@ -1,0 +1,37 @@
+CATATAN PERUBAHAN TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX4
+================================================================
+
+PERBAIKAN TAMPILAN
+------------------
+1. Pembagian tetap Intersection Settings : Live Preview = 40 : 60.
+2. Pembagian tidak dapat digeser operator.
+3. Panel kiri mempunyai lebar minimum 440 px.
+4. Panel kanan mempunyai lebar minimum 400 px.
+5. Isi scroll area selalu dipaksa mengikuti lebar viewport.
+6. Horizontal auto-scroll dikunci pada posisi nol.
+7. Kotak informasi Intersection Layout dihapus.
+8. Kotak informasi Camera Layout dihapus.
+9. Teks "Drag lampu SG atau nama SG..." di dalam kanvas dihapus.
+10. Ruang bawah 24 px untuk teks tersebut ikut dihapus.
+11. Live Preview menjadi persegi dengan ukuran 260 sampai 520 px dan diletakkan
+    pada posisi tengah atas yang stabil.
+
+PERBAIKAN SINKRONISASI LIVE VIEW
+--------------------------------
+Sebelumnya respons SAVE hanya memperbarui revision pada editor. Live View masih
+menunggu GET verifikasi sebelum menerima layout baru.
+
+FIX4 menyimpan salinan layout yang dikirim bersama request. Setelah ESP32-S3
+membalas SAVE berhasil:
+
+  SAVE berhasil
+  -> shared repository langsung diperbarui
+  -> sinyal intersection_changed dikirim
+  -> Live View langsung menggambar layout baru
+  -> GET ke controller tetap dilakukan sebagai verifikasi
+
+Data hasil GET tetap menjadi sumber final jika controller mengembalikan data
+yang berbeda.
+
+Tidak ada perubahan pada Plan, Stage, Schedule, Holiday, traffic runtime,
+Safety Manager, atau format API ESP32-S3.

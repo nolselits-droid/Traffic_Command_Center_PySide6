@@ -49,6 +49,10 @@ class CameraRepository:
             camera.username = str(record.get("username") or camera.username)
             camera.main_path = str(record.get("mainPath") or camera.main_path)
             camera.sub_path = str(record.get("subPath") or camera.sub_path)
+            camera.rtsp_cache_ms = self._safe_cache(
+                record.get("rtspCacheMs"),
+                camera.rtsp_cache_ms,
+            )
 
         if keyring is not None:
             try:
@@ -77,6 +81,7 @@ class CameraRepository:
             "username": camera.username,
             "mainPath": camera.main_path,
             "subPath": camera.sub_path,
+            "rtspCacheMs": camera.rtsp_cache_ms,
         }
         self._save_records()
 
@@ -124,7 +129,7 @@ class CameraRepository:
         temporary = CAMERA_STORE_PATH.with_suffix(".tmp")
         temporary.write_text(
             json.dumps(
-                {"schemaVersion": 1, "cameras": self._records},
+                {"schemaVersion": 2, "cameras": self._records},
                 indent=2,
                 ensure_ascii=False,
             )
@@ -140,3 +145,11 @@ class CameraRepository:
         except (TypeError, ValueError):
             return fallback
         return port if 1 <= port <= 65535 else fallback
+
+    @staticmethod
+    def _safe_cache(value: Any, fallback: int) -> int:
+        try:
+            cache_ms = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        return cache_ms if 200 <= cache_ms <= 3000 else fallback

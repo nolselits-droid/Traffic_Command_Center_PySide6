@@ -275,7 +275,7 @@ class SystemSettingsService(QObject):
         request.setRawHeader(b"Accept", b"application/json")
         request.setRawHeader(
             b"User-Agent",
-            b"Traffic-Command-Center/0.6.00-FIX1-TEST",
+            b"Traffic-Command-Center/0.6.01-TEST1-FIX8",
         )
         request.setRawHeader(b"Connection", b"close")
         request.setTransferTimeout(5000)

@@ -1,0 +1,36 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX5
+================================================================
+
+A. FORM SATU BARIS
+------------------
+1. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+2. Pastikan setiap label sejajar satu baris dengan field nilainya.
+3. Pastikan tulisan dan nilai tidak terpotong.
+4. Uji Diagram Type FOUR WAY, FIVE WAY, T JUNCTION, STRAIGHT ROAD, dan SINGLE
+   APPROACH.
+5. Pastikan Destination Road Arms tetap terlihat pada area nilai.
+
+B. ARAH MATA ANGIN
+------------------
+1. Pastikan NORTH berada di atas luar kanvas hijau.
+2. Pastikan SOUTH berada di bawah luar kanvas hijau.
+3. Pastikan WEST berada di kiri luar kanvas hijau.
+4. Pastikan EAST berada di kanan luar kanvas hijau.
+5. Pastikan label arah tidak menimpa ARM, SG, nama SG, atau flow.
+
+C. STABILITAS TAMPILAN
+----------------------
+1. Biarkan halaman terbuka minimal 60 detik.
+2. Jangan menekan tombol apa pun.
+3. Pastikan tombol SAVE INTERSECTION LAYOUT tidak berkedip atau berubah abu-abu.
+4. Pastikan Live Preview tidak bergeser atau berkedip seluruhnya.
+5. Jika SG sedang FLASH YELLOW, hanya lampu SG yang boleh berkedip.
+
+D. RELOAD DAN SAVE
+------------------
+1. Tekan RELOAD FROM CONTROLLER.
+2. Tombol boleh nonaktif selama request manual berlangsung.
+3. Ubah layout lalu tekan SAVE INTERSECTION LAYOUT.
+4. Tombol boleh nonaktif selama SAVE berlangsung.
+5. Pastikan tab LIVE VIEW langsung memakai layout yang disimpan.
+6. Pastikan GET verifikasi dan revision guard tetap berjalan.

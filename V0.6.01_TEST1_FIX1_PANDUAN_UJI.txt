@@ -1,0 +1,71 @@
+PANDUAN UJI TRAFFIC COMMAND CENTER V0.6.01 TEST1 FIX1
+================================================================
+
+A. MENJALANKAN APLIKASI
+-----------------------
+1. Buka folder aplikasi melalui VSCode.
+2. Aktifkan virtual environment yang biasa digunakan.
+3. Jalankan:
+
+     python main.py
+
+4. Buka SYSTEM SETTINGS -> INTERSECTION LAYOUT.
+
+
+B. UJI PADA UKURAN WINDOW MINIMUM
+---------------------------------
+1. Kecilkan window aplikasi mendekati ukuran minimum 1180 x 700.
+2. Periksa panel pengaturan sebelah kiri.
+3. Periksa panel Live Preview sebelah kanan.
+
+Hasil yang benar:
+- Menu tidak saling bertumpuk.
+- Kedua panel tetap berada berdampingan.
+- Panel kiri dapat digulir secara vertikal.
+- Panel kanan dapat digulir secara vertikal.
+- Tidak muncul scroll horizontal pada kedua panel.
+- Live Preview tampil utuh setelah posisinya berada di area tampilan.
+
+
+C. UJI PADA LAYAR FULL HD
+-------------------------
+1. Maksimalkan aplikasi pada resolusi 1920 x 1080.
+2. Buka kembali tab INTERSECTION LAYOUT.
+
+Hasil yang benar:
+- Live Preview terlihat lebih besar daripada pada window minimum.
+- Menu kiri dan panel kanan tidak tumpang tindih.
+- Signal Group Identification tetap rapi dalam dua kolom.
+
+
+D. UJI TOMBOL
+-------------
+Pastikan susunannya:
+
+  RELOAD FROM CONTROLLER
+  RESET SG POSITIONS | SAVE INTERSECTION LAYOUT
+
+Lakukan uji berikut:
+1. Tekan RELOAD FROM CONTROLLER dan pastikan layout dimuat dari ESP32-S3.
+2. Ubah salah satu posisi SG.
+3. Tekan SAVE INTERSECTION LAYOUT.
+4. Pastikan notifikasi berhasil tampil.
+5. Muat ulang dan pastikan posisi yang disimpan tetap sama.
+
+
+E. UJI SIGNAL GROUP IDENTIFICATION
+----------------------------------
+1. Ubah salah satu nama SG.
+2. Tekan SAVE SG NAMES.
+3. Pastikan nama pada Live Preview ikut berubah.
+4. Pastikan semua field SG1 sampai SG12 dapat dicapai dengan scroll panel kanan.
+
+
+F. CATATAN
+----------
+Perbaikan ini hanya mengubah susunan UI. Tidak ada perubahan pada:
+- API Intersection Layout ESP32-S3.
+- schemaVersion atau layoutRevision.
+- Plan, Stage, Schedule, dan Holiday.
+- Output lampu atau Safety Manager.
+- Camera Layout.
